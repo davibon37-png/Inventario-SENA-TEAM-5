@@ -47,7 +47,7 @@ def obtener_productos():
 def buscar_productos(termino):
     """Busca productos por nombre o categoría"""
     try:
-        resultado = supabase.table("inventario").select("*").or_(f"nombre.ilike.%{termino}%,categoria.ilike.%{termino}%").execute()
+        resultado = supabase.table("inventario").select("*").ilike("nombre", f"%{termino}%").execute()
         return resultado.data
     except:
         return []
@@ -71,35 +71,19 @@ def eliminar_producto(producto_id):
         st.error(f"Error al eliminar: {e}")
         return False
 
-def agregar_movimiento(producto_id, tipo, cantidad, notas):
-    """Registra movimiento de inventario"""
-    try:
-        movimiento = {
-            "producto_id": producto_id,
-            "tipo": tipo,  # 'entrada' o 'salida'
-            "cantidad": cantidad,
-            "notas": notas,
-            "fecha": datetime.now().isoformat()
-        }
-        supabase.table("movimientos").insert(movimiento).execute()
-        return True
-    except Exception as e:
-        st.error(f"Error al registrar movimiento: {e}")
-        return False
-
 # Interfaz principal
 def main():
     # Insertar datos de ejemplo si es necesario
     if 'inicializado' not in st.session_state:
-        insertar_datos_ejemplo()
-        st.session_state.inicializado = True
+        if insertar_datos_ejemplo():
+            st.session_state.inicializado = True
     
     # Sidebar
     with st.sidebar:
         st.header("🔧 Navegación")
         opcion = st.radio(
             "Selecciona una opción:",
-            ["📊 Dashboard", "📦 Gestión de Productos", "🔄 Movimientos", "📈 Reportes", "⚙️ Configuración"]
+            ["📊 Dashboard", "📦 Gestión de Productos", "📈 Reportes"]
         )
         
         st.markdown("---")
@@ -110,12 +94,8 @@ def main():
         mostrar_dashboard()
     elif opcion == "📦 Gestión de Productos":
         gestionar_productos()
-    elif opcion == "🔄 Movimientos":
-        gestionar_movimientos()
     elif opcion == "📈 Reportes":
         mostrar_reportes()
-    elif opcion == "⚙️ Configuración":
-        mostrar_configuracion()
 
 def mostrar_dashboard():
     st.header("📊 Dashboard de Inventario")
@@ -138,7 +118,7 @@ def mostrar_dashboard():
         st.metric("Stock Total", df['cantidad'].sum())
     with col4:
         productos_bajos = df[df['cantidad'] <= df['min_stock']]
-        st.metric("Productos con Stock Bajo", len(productos_bajos), delta=f"-{len(productos_bajos)}")
+        st.metric("Productos con Stock Bajo", len(productos_bajos))
     
     # Alertas de stock bajo
     if not productos_bajos.empty:
@@ -153,9 +133,9 @@ def mostrar_dashboard():
         st.bar_chart(stock_categoria)
     
     with col2:
-        st.subheader("Valor por Categoría")
-        valor_categoria = df.groupby('categoria').apply(lambda x: (x['cantidad'] * x['precio']).sum())
-        st.bar_chart(valor_categoria)
+        st.subheader("Top Productos por Valor")
+        top_productos = df.nlargest(5, 'precio')[['nombre', 'precio']]
+        st.dataframe(top_productos, use_container_width=True)
 
 def gestionar_productos():
     st.header("📦 Gestión de Productos")
@@ -210,7 +190,8 @@ def gestionar_productos():
         if productos:
             producto_seleccionado = st.selectbox(
                 "Selecciona producto a editar:",
-                options=[f"{p['id']} - {p['nombre']}" for p in productos]
+                options=[f"{p['id']} - {p['nombre']}" for p in productos],
+                key="editar_select"
             )
             
             if producto_seleccionado:
@@ -218,35 +199,50 @@ def gestionar_productos():
                 producto = next((p for p in productos if p['id'] == producto_id), None)
                 
                 if producto:
-                    with st.form("editar_producto"):
+                    # Formulario de edición (SOLO para editar)
+                    with st.form(f"editar_producto_{producto_id}"):
                         col1, col2 = st.columns(2)
                         with col1:
-                            nombre = st.text_input("Nombre", value=producto['nombre'])
-                            categoria = st.text_input("Categoría", value=producto['categoria'])
-                            precio = st.number_input("Precio", value=float(producto['precio']))
+                            nombre = st.text_input("Nombre", value=producto['nombre'], key=f"nombre_{producto_id}")
+                            categoria = st.text_input("Categoría", value=producto['categoria'], key=f"categoria_{producto_id}")
+                            precio = st.number_input("Precio", value=float(producto['precio']), key=f"precio_{producto_id}")
                         with col2:
-                            cantidad = st.number_input("Cantidad", value=producto['cantidad'])
-                            proveedor = st.text_input("Proveedor", value=producto.get('proveedor', ''))
-                            min_stock = st.number_input("Stock mínimo", value=producto.get('min_stock', 0))
+                            cantidad = st.number_input("Cantidad", value=producto['cantidad'], key=f"cantidad_{producto_id}")
+                            proveedor = st.text_input("Proveedor", value=producto.get('proveedor', ''), key=f"proveedor_{producto_id}")
+                            min_stock = st.number_input("Stock mínimo", value=producto.get('min_stock', 0), key=f"min_stock_{producto_id}")
                         
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            if st.form_submit_button("💾 Guardar Cambios"):
-                                if actualizar_producto(producto_id, {
-                                    "nombre": nombre,
-                                    "categoria": categoria,
-                                    "precio": precio,
-                                    "cantidad": cantidad,
-                                    "proveedor": proveedor,
-                                    "min_stock": min_stock
-                                }):
-                                    st.success("✅ Producto actualizado")
-                                    st.rerun()
-                        with col2:
-                            if st.button("🗑️ Eliminar Producto", type="secondary"):
-                                if eliminar_producto(producto_id):
-                                    st.success("✅ Producto eliminado")
-                                    st.rerun()
+                        # Botón de guardar DENTRO del formulario
+                        guardado = st.form_submit_button("💾 Guardar Cambios")
+                        if guardado:
+                            if actualizar_producto(producto_id, {
+                                "nombre": nombre,
+                                "categoria": categoria,
+                                "precio": precio,
+                                "cantidad": cantidad,
+                                "proveedor": proveedor,
+                                "min_stock": min_stock
+                            }):
+                                st.success("✅ Producto actualizado")
+                                st.rerun()
+                    
+                    # Botón de eliminar FUERA del formulario
+                    st.markdown("---")
+                    st.warning("Zona de peligro")
+                    col1, col2 = st.columns([3, 1])
+                    with col2:
+                        if st.button("🗑️ Eliminar Producto", type="secondary", key=f"eliminar_{producto_id}"):
+                            # Confirmación antes de eliminar
+                            with st.expander("⚠️ Confirmar eliminación", expanded=True):
+                                st.error(f"¿Estás seguro de eliminar **{producto['nombre']}**?")
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    if st.button("✅ Sí, eliminar", type="primary", key=f"confirmar_eliminar_{producto_id}"):
+                                        if eliminar_producto(producto_id):
+                                            st.success("✅ Producto eliminado")
+                                            st.rerun()
+                                with col2:
+                                    if st.button("❌ Cancelar", key=f"cancelar_eliminar_{producto_id}"):
+                                        st.info("Eliminación cancelada")
     
     with tab4:
         termino = st.text_input("🔍 Buscar producto por nombre o categoría:")
@@ -257,71 +253,6 @@ def gestionar_productos():
                 st.dataframe(pd.DataFrame(resultados), use_container_width=True)
             else:
                 st.info("No se encontraron productos")
-
-def gestionar_movimientos():
-    st.header("🔄 Gestión de Movimientos")
-    
-    # Crear tabla de movimientos si no existe
-    try:
-        supabase.table("movimientos").select("id").limit(1).execute()
-    except:
-        # Crear tabla movimientos
-        st.info("Creando tabla de movimientos...")
-    
-    productos = obtener_productos()
-    if not productos:
-        st.warning("Primero agrega productos al inventario")
-        return
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("Entrada de Stock")
-        with st.form("entrada_stock"):
-            producto_entrada = st.selectbox(
-                "Producto:",
-                options=[f"{p['id']} - {p['nombre']}" for p in productos],
-                key="entrada"
-            )
-            cantidad_entrada = st.number_input("Cantidad a agregar:", min_value=1, value=1)
-            notas_entrada = st.text_area("Notas (opcional):")
-            
-            if st.form_submit_button("📥 Registrar Entrada"):
-                producto_id = int(producto_entrada.split(" - ")[0])
-                producto = next((p for p in productos if p['id'] == producto_id), None)
-                
-                if producto:
-                    # Actualizar stock
-                    nueva_cantidad = producto['cantidad'] + cantidad_entrada
-                    if actualizar_producto(producto_id, {"cantidad": nueva_cantidad}):
-                        agregar_movimiento(producto_id, "entrada", cantidad_entrada, notas_entrada)
-                        st.success("✅ Entrada registrada correctamente")
-                        st.rerun()
-    
-    with col2:
-        st.subheader("Salida de Stock")
-        with st.form("salida_stock"):
-            producto_salida = st.selectbox(
-                "Producto:",
-                options=[f"{p['id']} - {p['nombre']}" for p in productos],
-                key="salida"
-            )
-            cantidad_salida = st.number_input("Cantidad a retirar:", min_value=1, value=1)
-            notas_salida = st.text_area("Notas (opcional):", key="notas_salida")
-            
-            if st.form_submit_button("📤 Registrar Salida"):
-                producto_id = int(producto_salida.split(" - ")[0])
-                producto = next((p for p in productos if p['id'] == producto_id), None)
-                
-                if producto:
-                    if cantidad_salida <= producto['cantidad']:
-                        nueva_cantidad = producto['cantidad'] - cantidad_salida
-                        if actualizar_producto(producto_id, {"cantidad": nueva_cantidad}):
-                            agregar_movimiento(producto_id, "salida", cantidad_salida, notas_salida)
-                            st.success("✅ Salida registrada correctamente")
-                            st.rerun()
-                    else:
-                        st.error("❌ No hay suficiente stock disponible")
 
 def mostrar_reportes():
     st.header("📈 Reportes e Analytics")
@@ -341,20 +272,9 @@ def mostrar_reportes():
             options=df['categoria'].unique(),
             default=df['categoria'].unique()
         )
-    with col2:
-        rango_precios = st.slider(
-            "Filtrar por precio:",
-            min_value=float(df['precio'].min()),
-            max_value=float(df['precio'].max()),
-            value=(float(df['precio'].min()), float(df['precio'].max()))
-        )
     
     # Aplicar filtros
-    df_filtrado = df[
-        (df['categoria'].isin(categorias_seleccionadas)) &
-        (df['precio'] >= rango_precios[0]) &
-        (df['precio'] <= rango_precios[1])
-    ]
+    df_filtrado = df[df['categoria'].isin(categorias_seleccionadas)]
     
     # Métricas
     st.subheader("Métricas Filtradas")
@@ -377,33 +297,6 @@ def mostrar_reportes():
         st.subheader("Top 5 Productos por Valor")
         top_productos = df_filtrado.nlargest(5, 'precio')[['nombre', 'precio']]
         st.dataframe(top_productos, use_container_width=True)
-
-def mostrar_configuracion():
-    st.header("⚙️ Configuración")
-    
-    st.subheader("Base de Datos")
-    if st.button("🔄 Reinicializar Datos de Ejemplo"):
-        # Eliminar todos los datos y recrear ejemplos
-        try:
-            productos = obtener_productos()
-            for producto in productos:
-                eliminar_producto(producto['id'])
-            insertar_datos_ejemplo()
-            st.success("✅ Base de datos reinicializada")
-            st.rerun()
-        except Exception as e:
-            st.error(f"Error: {e}")
-    
-    st.subheader("Información del Sistema")
-    st.info("""
-    **Sistema de Inventario v2.0**
-    - ✅ CRUD completo de productos
-    - ✅ Gestión de movimientos (entradas/salidas)
-    - ✅ Dashboard con métricas
-    - ✅ Reportes y analytics
-    - ✅ Búsqueda y filtros avanzados
-    - ✅ Exportación de datos
-    """)
 
 if __name__ == "__main__":
     main()
