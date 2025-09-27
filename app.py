@@ -11,7 +11,6 @@ supabase = get_supabase_client()
 
 # Función para insertar datos de ejemplo
 def insertar_datos_ejemplo():
-    """Inserta datos de ejemplo si la tabla está vacía"""
     try:
         # Verificar si ya hay datos
         resultado = supabase.table("inventario").select("id").limit(1).execute()
@@ -173,3 +172,4 @@ with st.sidebar:
     - Agrega nuevos productos con el formulario
     - Los campos con * son obligatorios
     """)
+
