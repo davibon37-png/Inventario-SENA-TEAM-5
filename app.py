@@ -5,7 +5,7 @@ from datetime import datetime
 
 # Configuración de la página
 st.set_page_config(page_title="Sistema de Inventario", layout="wide")
-st.title("🏢 Sistema de Inventario Completo")
+st.title("🏢 Sistema de Inventario")
 
 # Inicializar cliente de Supabase
 supabase = get_supabase_client()
@@ -300,3 +300,4 @@ def mostrar_reportes():
 
 if __name__ == "__main__":
     main()
+
