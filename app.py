@@ -169,7 +169,7 @@ def mostrar_dashboard():
         st.bar_chart(stock_categoria)
     
     with col2:
-        st.subheader("Valor por Categoría (COP)")
+        st.subheader("Valor por Categoría")
         valor_categoria = df.groupby('categoria')['valor_total'].sum()
         st.bar_chart(valor_categoria)
 
@@ -420,4 +420,5 @@ def mostrar_reportes():
 
 if __name__ == "__main__":
     main()
+
 
