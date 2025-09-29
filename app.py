@@ -179,8 +179,8 @@ def gestionar_productos():
                 if categorias_actuales:
                     # Mostrar dropdown con categorías existentes + opción para nueva
                     opcion_categoria = st.selectbox(
-                        "Selecciona categoría existente o crea nueva:",
-                        options=categorias_actuales + ["➕ CREAR NUEVA CATEGORÍA"],
+                        "Selecciona categoría:",
+                        options=categorias_actuales
                         key="categoria_select"
                     )
                     
@@ -329,3 +329,4 @@ def mostrar_reportes():
 
 if __name__ == "__main__":
     main()
+
