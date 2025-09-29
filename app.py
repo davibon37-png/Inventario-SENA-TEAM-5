@@ -5,18 +5,39 @@ from datetime import datetime
 
 # Configuración de la página
 st.set_page_config(page_title="Sistema de Inventario", layout="wide")
-st.title("🏢 Sistema de Inventario")
+st.title("🏢 Sistema de Inventario Completo")
 
 # Inicializar cliente de Supabase
 supabase = get_supabase_client()
 
+# Función para obtener categorías únicas de la base de datos
+def obtener_categorias():
+    try:
+        # Obtener todas las categorías únicas directamente desde Supabase
+        response = supabase.table("inventario").select("categoria").execute()
+        if response.data:
+            categorias = list(set([item['categoria'] for item in response.data]))
+            return sorted([cat for cat in categorias if cat])  # Filtrar categorías no nulas
+        return []
+    except Exception as e:
+        st.error(f"Error al obtener categorías: {e}")
+        return []
+
+# Función para obtener todos los productos
+def obtener_productos():
+    try:
+        response = supabase.table("inventario").select("*").order("id").execute()
+        return response.data
+    except Exception as e:
+        st.error(f"Error al obtener productos: {e}")
+        return []
+
 # Función para insertar datos de ejemplo
 def insertar_datos_ejemplo():
-    """Inserta datos de ejemplo si la tabla está vacía"""
     try:
-        resultado = supabase.table("inventario").select("id").limit(1).execute()
-        
-        if not resultado.data:
+        # Verificar si ya hay datos
+        productos = obtener_productos()
+        if not productos:
             datos_ejemplo = [
                 {"nombre": "Laptop HP Pavilion", "cantidad": 15, "categoria": "Tecnología", "proveedor": "HP Inc.", "precio": 899.99, "min_stock": 5},
                 {"nombre": "Mouse Inalámbrico", "cantidad": 50, "categoria": "Tecnología", "proveedor": "Logitech", "precio": 29.99, "min_stock": 10},
@@ -24,7 +45,6 @@ def insertar_datos_ejemplo():
                 {"nombre": "Silla de Oficina", "cantidad": 12, "categoria": "Mobiliario", "proveedor": "ErgoChair", "precio": 299.99, "min_stock": 2},
                 {"nombre": "Escritorio Ejecutivo", "cantidad": 5, "categoria": "Mobiliario", "proveedor": "OfficeMax", "precio": 499.99, "min_stock": 1},
                 {"nombre": "Tóner Negro", "cantidad": 25, "categoria": "Insumos", "proveedor": "Canon", "precio": 89.99, "min_stock": 15},
-                {"nombre": "Jabón", "cantidad": 22, "categoria": "Aseo personal", "proveedor": "Rey", "precio": 89.99, "min_stock": 11},
             ]
             
             for producto in datos_ejemplo:
@@ -37,24 +57,7 @@ def insertar_datos_ejemplo():
     return False
 
 # Funciones CRUD
-def obtener_productos():
-    """Obtiene todos los productos"""
-    try:
-        return supabase.table("inventario").select("*").order("id").execute().data
-    except Exception as e:
-        st.error(f"Error al obtener productos: {e}")
-        return []
-
-def buscar_productos(termino):
-    """Busca productos por nombre o categoría"""
-    try:
-        resultado = supabase.table("inventario").select("*").ilike("nombre", f"%{termino}%").execute()
-        return resultado.data
-    except:
-        return []
-
 def actualizar_producto(producto_id, datos):
-    """Actualiza un producto existente"""
     try:
         datos['fecha_actualizacion'] = datetime.now().isoformat()
         supabase.table("inventario").update(datos).eq("id", producto_id).execute()
@@ -64,7 +67,6 @@ def actualizar_producto(producto_id, datos):
         return False
 
 def eliminar_producto(producto_id):
-    """Elimina un producto"""
     try:
         supabase.table("inventario").delete().eq("id", producto_id).execute()
         return True
@@ -74,10 +76,10 @@ def eliminar_producto(producto_id):
 
 # Interfaz principal
 def main():
-    # Insertar datos de ejemplo si es necesario
+    # Inicializar datos si es necesario
     if 'inicializado' not in st.session_state:
-        if insertar_datos_ejemplo():
-            st.session_state.inicializado = True
+        insertar_datos_ejemplo()
+        st.session_state.inicializado = True
     
     # Sidebar
     with st.sidebar:
@@ -87,10 +89,14 @@ def main():
             ["📊 Dashboard", "📦 Gestión de Productos", "📈 Reportes"]
         )
         
-        st.markdown("---")
-        st.info("💡 **Sistema de Inventario v2.0**")
+        # Mostrar categorías existentes
+        categorias = obtener_categorias()
+        if categorias:
+            st.markdown("---")
+            st.subheader("🏷️ Categorías Existentes")
+            for categoria in categorias:
+                st.write(f"• {categoria}")
     
-    # Contenido principal según opción seleccionada
     if opcion == "📊 Dashboard":
         mostrar_dashboard()
     elif opcion == "📦 Gestión de Productos":
@@ -119,12 +125,7 @@ def mostrar_dashboard():
         st.metric("Stock Total", df['cantidad'].sum())
     with col4:
         productos_bajos = df[df['cantidad'] <= df['min_stock']]
-        st.metric("Productos con Stock Bajo", len(productos_bajos))
-    
-    # Alertas de stock bajo
-    if not productos_bajos.empty:
-        st.warning("🚨 **Productos con Stock Bajo**")
-        st.dataframe(productos_bajos[['nombre', 'cantidad', 'min_stock']], use_container_width=True)
+        st.metric("Stock Bajo", len(productos_bajos))
     
     # Gráficos
     col1, col2 = st.columns(2)
@@ -134,126 +135,146 @@ def mostrar_dashboard():
         st.bar_chart(stock_categoria)
     
     with col2:
-        st.subheader("Top Productos por Valor")
-        top_productos = df.nlargest(5, 'precio')[['nombre', 'precio']]
-        st.dataframe(top_productos, use_container_width=True)
+        st.subheader("Productos por Categoría")
+        conteo_categorias = df['categoria'].value_counts()
+        st.bar_chart(conteo_categorias)
 
 def gestionar_productos():
     st.header("📦 Gestión de Productos")
     
-    tab1, tab2, tab3, tab4 = st.tabs(["Ver Todos", "Agregar Nuevo", "Editar Existente", "Buscar"])
+    tab1, tab2, tab3 = st.tabs(["Ver Todos", "Agregar Nuevo", "Editar/Buscar"])
     
     with tab1:
         productos = obtener_productos()
         if productos:
             df = pd.DataFrame(productos)
             st.dataframe(df, use_container_width=True)
-            
-            # Exportar datos
-            csv = df.to_csv(index=False)
-            st.download_button("📥 Exportar CSV", csv, "inventario.csv", "text/csv")
         else:
             st.info("No hay productos registrados")
     
     with tab2:
-        with st.form("agregar_producto"):
+        st.subheader("Agregar Nuevo Producto")
+        
+        # Obtener categorías actuales
+        categorias_existentes = obtener_categorias()
+        
+        with st.form("agregar_producto_form"):
             col1, col2 = st.columns(2)
+            
             with col1:
-                nombre = st.text_input("Nombre del producto*")
-                categoria = st.selectbox("Categoría*", ["Tecnología", "Mobiliario", "Insumos", "Otros"])
-                precio = st.number_input("Precio unitario*", min_value=0.0, value=0.0)
+                nombre = st.text_input("Nombre del producto*", placeholder="Ej: Ventilador de Pie")
+                
+                # 🎯 SISTEMA MEJORADO DE CATEGORÍAS
+                st.markdown("**Categoría***")
+                
+                # Opción para categorías
+                if categorias_existentes:
+                    opcion_categoria = st.radio(
+                        "Selecciona:",
+                        ["Usar categoría existente", "Crear nueva categoría"],
+                        key="categoria_opcion"
+                    )
+                else:
+                    opcion_categoria = "Crear nueva categoría"
+                    st.info("No hay categorías existentes. Creará una nueva.")
+                
+                if opcion_categoria == "Usar categoría existente":
+                    categoria = st.selectbox(
+                        "Selecciona categoría:",
+                        options=categorias_existentes,
+                        key="select_categoria"
+                    )
+                else:
+                    categoria = st.text_input(
+                        "Nueva categoría:*",
+                        placeholder="Ej: Electrodomésticos, Ropa, Herramientas...",
+                        key="nueva_categoria_input"
+                    )
+                
+                precio = st.number_input("Precio unitario*", min_value=0.0, value=0.0, step=0.01)
+            
             with col2:
                 cantidad = st.number_input("Cantidad inicial*", min_value=0, value=0)
-                proveedor = st.text_input("Proveedor")
+                proveedor = st.text_input("Proveedor", placeholder="Nombre del proveedor")
                 min_stock = st.number_input("Stock mínimo alerta", min_value=0, value=5)
             
-            if st.form_submit_button("➕ Agregar Producto"):
-                if nombre and categoria and precio >= 0:
-                    nuevo_producto = {
-                        "nombre": nombre,
-                        "categoria": categoria,
-                        "precio": precio,
-                        "cantidad": cantidad,
-                        "proveedor": proveedor,
-                        "min_stock": min_stock
-                    }
-                    try:
-                        supabase.table("inventario").insert(nuevo_producto).execute()
-                        st.success("✅ Producto agregado correctamente")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error: {e}")
+            # Información para el usuario
+            if opcion_categoria == "Crear nueva categoría" and categoria:
+                st.info(f"📝 Creando nueva categoría: **{categoria}**")
+            
+            submitted = st.form_submit_button("➕ Agregar Producto")
+            
+            if submitted:
+                # Validaciones
+                if not nombre or not nombre.strip():
+                    st.error("❌ El nombre del producto es obligatorio")
+                elif not categoria or not categoria.strip():
+                    st.error("❌ La categoría es obligatoria")
+                elif precio < 0:
+                    st.error("❌ El precio no puede ser negativo")
                 else:
-                    st.warning("Completa los campos obligatorios (*)")
+                    # Preparar datos
+                    nuevo_producto = {
+                        "nombre": nombre.strip(),
+                        "categoria": categoria.strip(),
+                        "precio": float(precio),
+                        "cantidad": int(cantidad),
+                        "proveedor": proveedor.strip(),
+                        "min_stock": int(min_stock),
+                        "fecha_actualizacion": datetime.now().isoformat()
+                    }
+                    
+                    # Insertar en la base de datos
+                    try:
+                        result = supabase.table("inventario").insert(nuevo_producto).execute()
+                        if result.data:
+                            st.success(f"✅ Producto '{nombre}' agregado exitosamente!")
+                            st.success(f"🏷️ Categoría: {categoria}")
+                            st.rerun()
+                        else:
+                            st.error("❌ Error al agregar el producto")
+                    except Exception as e:
+                        st.error(f"❌ Error de base de datos: {e}")
     
     with tab3:
+        st.subheader("Editar o Buscar Productos")
         productos = obtener_productos()
+        
         if productos:
-            producto_seleccionado = st.selectbox(
-                "Selecciona producto a editar:",
-                options=[f"{p['id']} - {p['nombre']}" for p in productos],
-                key="editar_select"
-            )
+            # Buscar productos
+            busqueda = st.text_input("🔍 Buscar producto por nombre:")
+            productos_filtrados = productos
             
-            if producto_seleccionado:
-                producto_id = int(producto_seleccionado.split(" - ")[0])
-                producto = next((p for p in productos if p['id'] == producto_id), None)
-                
-                if producto:
-                    # Formulario de edición (SOLO para editar)
-                    with st.form(f"editar_producto_{producto_id}"):
+            if busqueda:
+                productos_filtrados = [p for p in productos if busqueda.lower() in p['nombre'].lower()]
+                st.write(f"📋 {len(productos_filtrados)} productos encontrados")
+            
+            if productos_filtrados:
+                for producto in productos_filtrados:
+                    with st.expander(f"📦 {producto['nombre']} (ID: {producto['id']})"):
                         col1, col2 = st.columns(2)
                         with col1:
-                            nombre = st.text_input("Nombre", value=producto['nombre'], key=f"nombre_{producto_id}")
-                            categoria = st.text_input("Categoría", value=producto['categoria'], key=f"categoria_{producto_id}")
-                            precio = st.number_input("Precio", value=float(producto['precio']), key=f"precio_{producto_id}")
+                            st.write(f"**Categoría:** {producto['categoria']}")
+                            st.write(f"**Precio:** ${producto['precio']}")
+                            st.write(f"**Proveedor:** {producto.get('proveedor', 'N/A')}")
                         with col2:
-                            cantidad = st.number_input("Cantidad", value=producto['cantidad'], key=f"cantidad_{producto_id}")
-                            proveedor = st.text_input("Proveedor", value=producto.get('proveedor', ''), key=f"proveedor_{producto_id}")
-                            min_stock = st.number_input("Stock mínimo", value=producto.get('min_stock', 0), key=f"min_stock_{producto_id}")
+                            st.write(f"**Stock:** {producto['cantidad']} unidades")
+                            st.write(f"**Stock mínimo:** {producto.get('min_stock', 'N/A')}")
                         
-                        # Botón de guardar DENTRO del formulario
-                        guardado = st.form_submit_button("💾 Guardar Cambios")
-                        if guardado:
-                            if actualizar_producto(producto_id, {
-                                "nombre": nombre,
-                                "categoria": categoria,
-                                "precio": precio,
-                                "cantidad": cantidad,
-                                "proveedor": proveedor,
-                                "min_stock": min_stock
-                            }):
-                                st.success("✅ Producto actualizado")
-                                st.rerun()
-                    
-                    # Botón de eliminar FUERA del formulario
-                    st.markdown("---")
-                    st.warning("Zona de peligro")
-                    col1, col2 = st.columns([3, 1])
-                    with col2:
-                        if st.button("🗑️ Eliminar Producto", type="secondary", key=f"eliminar_{producto_id}"):
-                            # Confirmación antes de eliminar
-                            with st.expander("⚠️ Confirmar eliminación", expanded=True):
-                                st.error(f"¿Estás seguro de eliminar **{producto['nombre']}**?")
-                                col1, col2 = st.columns(2)
-                                with col1:
-                                    if st.button("✅ Sí, eliminar", type="primary", key=f"confirmar_eliminar_{producto_id}"):
-                                        if eliminar_producto(producto_id):
-                                            st.success("✅ Producto eliminado")
-                                            st.rerun()
-                                with col2:
-                                    if st.button("❌ Cancelar", key=f"cancelar_eliminar_{producto_id}"):
-                                        st.info("Eliminación cancelada")
-    
-    with tab4:
-        termino = st.text_input("🔍 Buscar producto por nombre o categoría:")
-        if termino:
-            resultados = buscar_productos(termino)
-            if resultados:
-                st.write(f"**Resultados encontrados:** {len(resultados)}")
-                st.dataframe(pd.DataFrame(resultados), use_container_width=True)
+                        # Botones de acción
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.button(f"✏️ Editar", key=f"editar_{producto['id']}"):
+                                st.session_state.editando = producto['id']
+                        with col2:
+                            if st.button(f"🗑️ Eliminar", key=f"eliminar_{producto['id']}"):
+                                if eliminar_producto(producto['id']):
+                                    st.success("✅ Producto eliminado")
+                                    st.rerun()
             else:
                 st.info("No se encontraron productos")
+        else:
+            st.info("No hay productos para mostrar")
 
 def mostrar_reportes():
     st.header("📈 Reportes e Analytics")
@@ -265,40 +286,28 @@ def mostrar_reportes():
     
     df = pd.DataFrame(productos)
     
-    # Filtros
-    col1, col2 = st.columns(2)
-    with col1:
-        categorias_seleccionadas = st.multiselect(
-            "Filtrar por categoría:",
-            options=df['categoria'].unique(),
-            default=df['categoria'].unique()
-        )
+    st.subheader("Resumen por Categoría")
+    resumen_categorias = df.groupby('categoria').agg({
+        'id': 'count',
+        'cantidad': 'sum',
+        'precio': 'mean'
+    }).round(2)
     
-    # Aplicar filtros
-    df_filtrado = df[df['categoria'].isin(categorias_seleccionadas)]
-    
-    # Métricas
-    st.subheader("Métricas Filtradas")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Valor Total", f"${(df_filtrado['cantidad'] * df_filtrado['precio']).sum():,.2f}")
-    with col2:
-        st.metric("Productos", len(df_filtrado))
-    with col3:
-        st.metric("Stock Promedio", int(df_filtrado['cantidad'].mean()))
+    resumen_categorias.columns = ['Número de Productos', 'Stock Total', 'Precio Promedio']
+    st.dataframe(resumen_categorias, use_container_width=True)
     
     # Gráficos
     col1, col2 = st.columns(2)
     with col1:
-        st.subheader("Distribución por Categoría")
-        if not df_filtrado.empty:
-            st.bar_chart(df_filtrado['categoria'].value_counts())
+        st.subheader("Distribución de Productos por Categoría")
+        fig = df['categoria'].value_counts().plot.pie(autopct='%1.1f%%')
+        st.pyplot(fig.figure)
     
     with col2:
-        st.subheader("Top 5 Productos por Valor")
-        top_productos = df_filtrado.nlargest(5, 'precio')[['nombre', 'precio']]
-        st.dataframe(top_productos, use_container_width=True)
+        st.subheader("Valor de Inventario por Categoría")
+        df['valor_total'] = df['cantidad'] * df['precio']
+        valor_por_categoria = df.groupby('categoria')['valor_total'].sum()
+        st.bar_chart(valor_por_categoria)
 
 if __name__ == "__main__":
     main()
-
