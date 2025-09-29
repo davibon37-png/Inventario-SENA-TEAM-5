@@ -52,67 +52,6 @@ def buscar_productos(termino):
     except:
         return []
 
-with tab2:
-    st.subheader("Agregar Nuevo Producto")
-    
-    with st.form("agregar_producto_form"):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            nombre = st.text_input("Nombre del producto*", placeholder="Ej: Ventilador de Pie")
-            
-            # 🎯 CAMPO DE TEXTO LIBRE PARA CATEGORÍA - SIN OPCIONES PREDEFINIDAS
-            categoria = st.text_input(
-                "Categoría*", 
-                placeholder="Ej: Electrodomésticos, Ropa, Herramientas...",
-                key="categoria_libre"
-            )
-            
-            precio = st.number_input("Precio unitario*", min_value=0.0, value=0.0, step=0.01)
-        
-        with col2:
-            cantidad = st.number_input("Cantidad inicial*", min_value=0, value=0)
-            proveedor = st.text_input("Proveedor", placeholder="Nombre del proveedor")
-            min_stock = st.number_input("Stock mínimo alerta", min_value=0, value=5)
-        
-        # Mensaje claro
-        st.info("💡 **Escribe CUALQUIER categoría que quieras** - se creará automáticamente")
-        
-        submitted = st.form_submit_button("➕ Agregar Producto")
-        
-        if submitted:
-            # Validaciones MUY simples
-            if not nombre.strip():
-                st.error("❌ El nombre del producto es obligatorio")
-            elif not categoria.strip():
-                st.error("❌ La categoría es obligatoria")
-            else:
-                # Preparar datos
-                nuevo_producto = {
-                    "nombre": nombre.strip(),
-                    "categoria": categoria.strip(),
-                    "precio": float(precio),
-                    "cantidad": int(cantidad),
-                    "proveedor": proveedor.strip(),
-                    "min_stock": int(min_stock)
-                }
-                
-                # DEBUG: Mostrar lo que se va a enviar
-                st.write("📤 Enviando estos datos a la base de datos:")
-                st.write(nuevo_producto)
-                
-                # Insertar en la base de datos
-                try:
-                    result = supabase.table("inventario").insert(nuevo_producto).execute()
-                    st.success(f"✅ ¡ÉXITO! Producto '{nombre}' agregado")
-                    st.success(f"🏷️ Categoría '{categoria}' creada correctamente")
-                    
-                    # Forzar recarga mostrando las nuevas categorías
-                    st.rerun()
-                    
-                except Exception as e:
-                    st.error(f"❌ Error al guardar: {str(e)}")
-
 def actualizar_producto(producto_id, datos):
     """Actualiza un producto existente"""
     try:
