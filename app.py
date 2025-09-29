@@ -10,9 +10,9 @@ st.title("🏢 Sistema de Inventario Completo")
 # Inicializar cliente de Supabase
 supabase = get_supabase_client()
 
-# Función para obtener categorías ACTUALIZADAS - SIN CACHÉ
+# Función para obtener categorías actualizadas
 def obtener_categorias_actualizadas():
-    """Obtiene categorías directamente de la base de datos sin cache"""
+    """Obtiene categorías directamente de la base de datos"""
     try:
         response = supabase.table("inventario").select("categoria").execute()
         if response.data:
@@ -80,7 +80,7 @@ def main():
         insertar_datos_ejemplo()
         st.session_state.inicializado = True
     
-    # Sidebar con categorías ACTUALIZADAS
+    # Sidebar
     with st.sidebar:
         st.header("🔧 Navegación")
         opcion = st.radio(
@@ -88,7 +88,7 @@ def main():
             ["📊 Dashboard", "📦 Gestión de Productos", "📈 Reportes"]
         )
         
-        # 🎯 OBTENER CATEGORÍAS ACTUALIZADAS PARA EL SIDEBAR
+        # Mostrar categorías existentes en sidebar
         categorias_sidebar = obtener_categorias_actualizadas()
         
         if categorias_sidebar:
@@ -164,33 +164,18 @@ def gestionar_productos():
     with tab2:
         st.subheader("Agregar Nuevo Producto")
         
-        # 🎯 OBTENER CATEGORÍAS ACTUALIZADAS - SIN CACHÉ
-        categorias_actuales = obtener_categorias_actualizadas()
-        
         with st.form("agregar_producto_form", clear_on_submit=True):
             col1, col2 = st.columns(2)
             
             with col1:
                 nombre = st.text_input("Nombre del producto*", placeholder="Ej: Ventilador de Pie")
                 
-                # 🎯 SISTEMA MEJORADO DE CATEGORÍAS - SIEMPRE ACTUALIZADO
-                st.markdown("**Categoría***")
-                
-                if categorias_actuales:
-                    # Mostrar dropdown con categorías existentes + opción para nueva
-                    opcion_categoria = st.selectbox(
-                        "Selecciona categoría:",
-                        options=categorias_actuales
-                        key="categoria_select"
-                    )
-                    
-                else:
-                    # Si no hay categorías, solo mostrar campo de texto
-                    categoria = st.text_input(
-                        "Categoría:*",
-                        placeholder="Ej: Tecnología, Mobiliario, Insumos...",
-                        key="primera_categoria"
-                    )
+                # 🎯 CAMPO DE TEXTO SIMPLE PARA CATEGORÍA - SIN DROPDOWN
+                categoria = st.text_input(
+                    "Categoría*",
+                    placeholder="Ej: Tecnología, Electrodomésticos, Ropa...",
+                    help="Escribe cualquier categoría que quieras"
+                )
                 
                 precio = st.number_input("Precio unitario*", min_value=0.0, value=0.0, step=0.01)
             
@@ -199,11 +184,8 @@ def gestionar_productos():
                 proveedor = st.text_input("Proveedor", placeholder="Nombre del proveedor")
                 min_stock = st.number_input("Stock mínimo alerta", min_value=0, value=5)
             
-            # 🎯 MOSTRAR CATEGORÍAS ACTUALES PARA DEBUG
-            st.markdown("---")
-            st.info(f"**📋 Categorías disponibles en el sistema:** {len(categorias_actuales)}")
-            if categorias_actuales:
-                st.write("• " + " • ".join(categorias_actuales))
+            # Información útil
+            st.info("💡 **Puedes escribir cualquier categoría.** Las categorías se crean automáticamente al agregar productos.")
             
             submitted = st.form_submit_button("➕ Agregar Producto")
             
@@ -211,8 +193,8 @@ def gestionar_productos():
                 # Validaciones
                 if not nombre or not nombre.strip():
                     st.error("❌ El nombre del producto es obligatorio")
-                elif not categoria or not categoria.strip() or categoria == "➕ CREAR NUEVA CATEGORÍA":
-                    st.error("❌ Debes seleccionar o escribir una categoría válida")
+                elif not categoria or not categoria.strip():
+                    st.error("❌ La categoría es obligatoria")
                 elif precio < 0:
                     st.error("❌ El precio no puede ser negativo")
                 else:
@@ -233,18 +215,11 @@ def gestionar_productos():
                         if result.data:
                             st.success(f"✅ Producto '{nombre}' agregado exitosamente!")
                             st.success(f"🏷️ Categoría: {categoria}")
-                            
-                            # 🎯 FORZAR ACTUALIZACIÓN INMEDIATA
                             st.rerun()
                         else:
                             st.error("❌ Error al agregar el producto")
                     except Exception as e:
                         st.error(f"❌ Error de base de datos: {e}")
-        
-        # 🎯 BOTÓN PARA ACTUALIZAR MANUALMENTE
-        st.markdown("---")
-        if st.button("🔄 Actualizar lista de categorías manualmente"):
-            st.rerun()
     
     with tab3:
         st.subheader("Editar o Buscar Productos")
@@ -321,5 +296,3 @@ def mostrar_reportes():
 
 if __name__ == "__main__":
     main()
-
-
