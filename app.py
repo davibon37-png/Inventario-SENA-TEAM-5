@@ -11,12 +11,61 @@ st.title("🏢 Sistema de Inventario Completo")
 supabase = get_supabase_client()
 
 # Función para obtener categorías únicas
-def obtener_categorias():
-    productos = obtener_productos()
-    if productos:
-        categorias = list(set([p['categoria'] for p in productos]))
-        return sorted(categorias)
-    return []
+with tab2:
+    categorias_existentes = obtener_categorias()
+    
+    with st.form("agregar_producto"):
+        col1, col2 = st.columns(2)
+        with col1:
+            nombre = st.text_input("Nombre del producto*")
+            
+            # 🚨 CÓDIGO CORREGIDO - CATEGORÍAS
+            st.markdown("**Categoría***")
+            
+            # Opción 1: Usar categoría existente
+            usar_existente = st.checkbox("Usar categoría existente", value=True if categorias_existentes else False)
+            
+            if usar_existente and categorias_existentes:
+                categoria = st.selectbox(
+                    "Selecciona categoría:",
+                    options=categorias_existentes,
+                    key="select_categoria"
+                )
+            else:
+                categoria = st.text_input(
+                    "Escribe nueva categoría:*",
+                    placeholder="Ej: Electrodomésticos, Ropa, Herramientas...",
+                    key="input_categoria"
+                )
+            
+            precio = st.number_input("Precio unitario*", min_value=0.0, value=0.0, step=0.01)
+            
+        with col2:
+            cantidad = st.number_input("Cantidad inicial*", min_value=0, value=0)
+            proveedor = st.text_input("Proveedor")
+            min_stock = st.number_input("Stock mínimo alerta", min_value=0, value=5)
+        
+        # Información clara para el usuario
+        st.info("💡 **Para nueva categoría:** Desmarca 'Usar categoría existente' y escribe cualquier categoría nueva")
+        
+        if st.form_submit_button("➕ Agregar Producto"):
+            if nombre and categoria and categoria.strip() and precio >= 0:
+                nuevo_producto = {
+                    "nombre": nombre,
+                    "categoria": categoria.strip(),
+                    "precio": precio,
+                    "cantidad": cantidad,
+                    "proveedor": proveedor,
+                    "min_stock": min_stock
+                }
+                try:
+                    supabase.table("inventario").insert(nuevo_producto).execute()
+                    st.success(f"✅ Producto '{nombre}' agregado en categoría '{categoria}'")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error: {e}")
+            else:
+                st.warning("❌ Completa todos los campos obligatorios (*)")
 
 # Función para insertar datos de ejemplo (actualizada)
 def insertar_datos_ejemplo():
@@ -205,3 +254,4 @@ def mostrar_reportes():
 
 if __name__ == "__main__":
     main()
+
