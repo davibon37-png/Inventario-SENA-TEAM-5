@@ -174,7 +174,7 @@ def mostrar_dashboard():
         st.bar_chart(valor_categoria)
 
 def gestionar_productos():
-    st.header("📦 Gestión de Productos - COP")
+    st.header("📦 Gestión de Productos")
     
     tab1, tab2, tab3 = st.tabs(["Ver Todos", "Agregar Nuevo", "Editar/Buscar"])
     
@@ -360,7 +360,7 @@ def gestionar_productos():
             st.info("No hay productos para mostrar")
 
 def mostrar_reportes():
-    st.header("📈 Reportes e Analytics - COP")
+    st.header("📈 Reportes y analítica")
     
     productos = obtener_productos()
     if not productos:
@@ -420,5 +420,6 @@ def mostrar_reportes():
 
 if __name__ == "__main__":
     main()
+
 
 
