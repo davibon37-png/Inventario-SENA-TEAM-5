@@ -164,17 +164,24 @@ def gestionar_productos():
     with tab2:
         st.subheader("Agregar Nuevo Producto")
         
+        # Obtener categorías actuales
+        categorias_actuales = obtener_categorias_actualizadas()
+        
+        if not categorias_actuales:
+            st.error("❌ No hay categorías disponibles. Primero agrega categorías desde la base de datos.")
+            return
+        
         with st.form("agregar_producto_form", clear_on_submit=True):
             col1, col2 = st.columns(2)
             
             with col1:
                 nombre = st.text_input("Nombre del producto*", placeholder="Ej: Ventilador de Pie")
                 
-                # 🎯 CAMPO DE TEXTO SIMPLE PARA CATEGORÍA - SIN DROPDOWN
-                categoria = st.text_input(
+                # 🎯 DROPDOWN OBLIGATORIO CON CATEGORÍAS EXISTENTES
+                categoria = st.selectbox(
                     "Categoría*",
-                    placeholder="Ej: Tecnología, Electrodomésticos, Ropa...",
-                    help="Escribe cualquier categoría que quieras"
+                    options=categorias_actuales,
+                    help="Selecciona una categoría existente"
                 )
                 
                 precio = st.number_input("Precio unitario*", min_value=0.0, value=0.0, step=0.01)
@@ -185,7 +192,7 @@ def gestionar_productos():
                 min_stock = st.number_input("Stock mínimo alerta", min_value=0, value=5)
             
             # Información útil
-            st.info("💡 **Puedes escribir cualquier categoría.** Las categorías se crean automáticamente al agregar productos.")
+            st.info(f"💡 **Categorías disponibles:** {', '.join(categorias_actuales)}")
             
             submitted = st.form_submit_button("➕ Agregar Producto")
             
@@ -193,15 +200,13 @@ def gestionar_productos():
                 # Validaciones
                 if not nombre or not nombre.strip():
                     st.error("❌ El nombre del producto es obligatorio")
-                elif not categoria or not categoria.strip():
-                    st.error("❌ La categoría es obligatoria")
                 elif precio < 0:
                     st.error("❌ El precio no puede ser negativo")
                 else:
                     # Preparar datos
                     nuevo_producto = {
                         "nombre": nombre.strip(),
-                        "categoria": categoria.strip(),
+                        "categoria": categoria,
                         "precio": float(precio),
                         "cantidad": int(cantidad),
                         "proveedor": proveedor.strip(),
@@ -246,16 +251,46 @@ def gestionar_productos():
                             st.write(f"**Stock:** {producto['cantidad']} unidades")
                             st.write(f"**Stock mínimo:** {producto.get('min_stock', 'N/A')}")
                         
-                        # Botones de acción
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            if st.button(f"✏️ Editar", key=f"editar_{producto['id']}"):
-                                st.session_state.editando = producto['id']
-                        with col2:
-                            if st.button(f"🗑️ Eliminar", key=f"eliminar_{producto['id']}"):
-                                if eliminar_producto(producto['id']):
-                                    st.success("✅ Producto eliminado")
+                        # Formulario de edición
+                        with st.form(f"editar_{producto['id']}"):
+                            st.subheader("✏️ Editar Producto")
+                            
+                            categorias_edicion = obtener_categorias_actualizadas()
+                            
+                            col_edit1, col_edit2 = st.columns(2)
+                            with col_edit1:
+                                nuevo_nombre = st.text_input("Nombre", value=producto['nombre'], key=f"nombre_edit_{producto['id']}")
+                                nueva_categoria = st.selectbox(
+                                    "Categoría",
+                                    options=categorias_edicion,
+                                    index=categorias_edicion.index(producto['categoria']) if producto['categoria'] in categorias_edicion else 0,
+                                    key=f"categoria_edit_{producto['id']}"
+                                )
+                                nuevo_precio = st.number_input("Precio", value=float(producto['precio']), key=f"precio_edit_{producto['id']}")
+                            
+                            with col_edit2:
+                                nueva_cantidad = st.number_input("Cantidad", value=producto['cantidad'], key=f"cantidad_edit_{producto['id']}")
+                                nuevo_proveedor = st.text_input("Proveedor", value=producto.get('proveedor', ''), key=f"proveedor_edit_{producto['id']}")
+                                nuevo_min_stock = st.number_input("Stock mínimo", value=producto.get('min_stock', 5), key=f"min_stock_edit_{producto['id']}")
+                            
+                            if st.form_submit_button("💾 Guardar Cambios"):
+                                datos_actualizados = {
+                                    "nombre": nuevo_nombre.strip(),
+                                    "categoria": nueva_categoria,
+                                    "precio": nuevo_precio,
+                                    "cantidad": nueva_cantidad,
+                                    "proveedor": nuevo_proveedor.strip(),
+                                    "min_stock": nuevo_min_stock
+                                }
+                                if actualizar_producto(producto['id'], datos_actualizados):
+                                    st.success("✅ Producto actualizado")
                                     st.rerun()
+                        
+                        # Botón de eliminar
+                        if st.button(f"🗑️ Eliminar Producto", key=f"eliminar_{producto['id']}"):
+                            if eliminar_producto(producto['id']):
+                                st.success("✅ Producto eliminado")
+                                st.rerun()
             else:
                 st.info("No se encontraron productos")
         else:
