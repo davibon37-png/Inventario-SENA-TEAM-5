@@ -15,8 +15,6 @@ def insertar_datos_ejemplo():
     """Inserta datos de ejemplo si la tabla está vacía"""
     try:
         resultado = supabase.table("inventario").select("id").limit(1).execute()
-        
-            ]
             
             for producto in datos_ejemplo:
                 supabase.table("inventario").insert(producto).execute()
@@ -292,4 +290,5 @@ def mostrar_reportes():
 
 if __name__ == "__main__":
     main()
+
 
