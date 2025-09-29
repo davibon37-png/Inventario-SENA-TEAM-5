@@ -24,6 +24,7 @@ def insertar_datos_ejemplo():
                 {"nombre": "Silla de Oficina", "cantidad": 12, "categoria": "Mobiliario", "proveedor": "ErgoChair", "precio": 299.99, "min_stock": 2},
                 {"nombre": "Escritorio Ejecutivo", "cantidad": 5, "categoria": "Mobiliario", "proveedor": "OfficeMax", "precio": 499.99, "min_stock": 1},
                 {"nombre": "Tóner Negro", "cantidad": 25, "categoria": "Insumos", "proveedor": "Canon", "precio": 89.99, "min_stock": 15},
+                {"nombre": "Jabón", "cantidad": 22, "categoria": "Aseo personal", "proveedor": "Rey", "precio": 89.99, "min_stock": 11},
             ]
             
             for producto in datos_ejemplo:
@@ -300,3 +301,4 @@ def mostrar_reportes():
 
 if __name__ == "__main__":
     main()
+
