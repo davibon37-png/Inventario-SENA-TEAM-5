@@ -184,14 +184,6 @@ def gestionar_productos():
                         key="categoria_select"
                     )
                     
-                    if opcion_categoria == "➕ CREAR NUEVA CATEGORÍA":
-                        categoria = st.text_input(
-                            "Escribe la nueva categoría:*",
-                            placeholder="Ej: Electrodomésticos, Ropa, Herramientas...",
-                            key="nueva_categoria_input"
-                        )
-                    else:
-                        categoria = opcion_categoria
                 else:
                     # Si no hay categorías, solo mostrar campo de texto
                     categoria = st.text_input(
@@ -329,4 +321,5 @@ def mostrar_reportes():
 
 if __name__ == "__main__":
     main()
+
 
