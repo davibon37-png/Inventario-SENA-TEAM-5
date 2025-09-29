@@ -5,7 +5,7 @@ from datetime import datetime
 
 # Configuración de la página
 st.set_page_config(page_title="Sistema de Inventario", layout="wide")
-st.title("🏢 Sistema de Inventario Completo - COP")
+st.title("🏢 Sistema de Inventario Completo")
 
 # Inicializar cliente de Supabase
 supabase = get_supabase_client()
@@ -108,9 +108,6 @@ def main():
             st.subheader("🏷️ Categorías Existentes")
             for categoria in categorias_sidebar:
                 st.write(f"• {categoria}")
-        
-        st.markdown("---")
-        st.info("💰 **Moneda:** Pesos Colombianos (COP)")
     
     if opcion == "📊 Dashboard":
         mostrar_dashboard()
@@ -120,7 +117,7 @@ def main():
         mostrar_reportes()
 
 def mostrar_dashboard():
-    st.header("📊 Dashboard de Inventario - COP")
+    st.header("📊 Dashboard de Inventario")
     
     productos = obtener_productos()
     if not productos:
@@ -423,3 +420,4 @@ def mostrar_reportes():
 
 if __name__ == "__main__":
     main()
+
