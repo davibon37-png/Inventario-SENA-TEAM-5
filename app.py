@@ -9,25 +9,25 @@ st.set_page_config(page_title="Sistema de Inventario", layout="wide")
 
 # ================== 🎯 USUARIOS DIRECTAMENTE EN EL CÓDIGO ==================
 USUARIOS = {
-    "briget": {
-        "password": "briget123",  # Contraseña en texto plano para verificación
+    "David27": {
+        "password": "david123",  # Contraseña en texto plano para verificación
         "password_hash": "15e2b0d3c33891ebb0f1ef609ec419420c20e320ce94c65fbc8c3312448eb225",
         "rol": "admin"
     },
     "brian": {
         "password": "brian123",
         "password_hash": "e6297b585db794e177808f8953b466bc67d1a8a525942aeb3ed4b5cb8a3c7d6f", 
-        "rol": "editor"
+        "rol": "admin"
     },
     "ivan": {
         "password": "ivan123",
         "password_hash": "1c1b4c71d5b4e7e3c7a7a8a9a5b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6",
-        "rol": "lector"
-    },
-    "admin": {
-        "password": "admin",
-        "password_hash": "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918",
         "rol": "admin"
+    },
+    "invitado": {
+        "password": "invitado123",
+        "password_hash": "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918",
+        "rol": "lector"
     }
 }
 # =============================================================================
@@ -78,24 +78,6 @@ def check_password():
                     st.error("❌ Contraseña incorrecta")
             else:
                 st.error("❌ Usuario no encontrado")
-    
-    # Mostrar usuarios de prueba
-    with st.expander("📋 Usuarios de Prueba (Haz clic para ver)"):
-        st.write("""
-        **Para probar el sistema:**
-        
-        **⚙️ Administradores (Acceso completo):**
-        - Usuario: **briget** / Contraseña: **briget123**
-        - Usuario: **admin** / Contraseña: **admin**
-        
-        **✏️ Editores (Pueden agregar y editar):**
-        - Usuario: **brian** / Contraseña: **brian123**
-        
-        **👁️ Lectores (Solo ver):**
-        - Usuario: **ivan** / Contraseña: **ivan123**
-        """)
-    
-    return False
 
 # Verificar permisos
 def tiene_permiso(permiso_requerido):
@@ -463,3 +445,4 @@ supabase = get_supabase_client()
 
 if __name__ == "__main__":
     main()
+
