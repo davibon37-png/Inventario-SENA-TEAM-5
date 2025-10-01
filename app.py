@@ -7,26 +7,30 @@ import hashlib
 # Configuración de la página
 st.set_page_config(page_title="Sistema de Inventario", layout="wide")
 
-# ================== 🎯 USUARIOS DIRECTAMENTE EN EL CÓDIGO ==================
+# ================== 🎯 USUARIOS ACTUALIZADOS ==================
 USUARIOS = {
-    "David27": {
-        "password": "david123",  # Contraseña en texto plano para verificación
-        "password_hash": "15e2b0d3c33891ebb0f1ef609ec419420c20e320ce94c65fbc8c3312448eb225",
+    "david": {
+        "password": "david123",
+        "rol": "admin"
+    },
+    "briget": {
+        "password": "briget123",
         "rol": "admin"
     },
     "brian": {
-        "password": "brian123",
-        "password_hash": "e6297b585db794e177808f8953b466bc67d1a8a525942aeb3ed4b5cb8a3c7d6f", 
+        "password": "brian123", 
         "rol": "admin"
     },
     "ivan": {
         "password": "ivan123",
-        "password_hash": "1c1b4c71d5b4e7e3c7a7a8a9a5b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6",
         "rol": "admin"
+    },
+    "lector": {
+        "password": "lector123",
+        "rol": "lector"
     },
     "invitado": {
         "password": "invitado123",
-        "password_hash": "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918",
         "rol": "lector"
     }
 }
@@ -42,7 +46,7 @@ def formato_cop(valor):
     except:
         return f"$ {valor}"
 
-# Sistema simple de autenticación - VERSIÓN CORREGIDA
+# Sistema simple de autenticación
 def check_password():
     """Sistema de login simplificado y corregido"""
     
@@ -67,7 +71,7 @@ def check_password():
             if username_lower in USUARIOS:
                 user_data = USUARIOS[username_lower]
                 
-                # Verificar contraseña (comparación directa con texto plano)
+                # Verificar contraseña
                 if password == user_data["password"]:
                     st.session_state["password_correct"] = True
                     st.session_state["user_role"] = user_data["rol"]
@@ -78,12 +82,27 @@ def check_password():
                     st.error("❌ Contraseña incorrecta")
             else:
                 st.error("❌ Usuario no encontrado")
+    
+    # Mostrar usuarios de prueba
+    with st.expander("📋 Usuarios del Sistema (Haz clic para ver)"):
+        st.write("""
+        **👨‍💼 Administradores (Acceso completo):**
+        - Usuario: **david** / Contraseña: **david123**
+        - Usuario: **briget** / Contraseña: **briget123**
+        - Usuario: **brian** / Contraseña: **brian123**
+        - Usuario: **ivan** / Contraseña: **ivan123**
+        
+        **👁️ Lectores (Solo visualización):**
+        - Usuario: **lector** / Contraseña: **lector123**
+        - Usuario: **invitado** / Contraseña: **invitado123**
+        """)
+    
+    return False
 
 # Verificar permisos
 def tiene_permiso(permiso_requerido):
     roles_permisos = {
         "lector": ["ver"],
-        "editor": ["ver", "agregar", "editar"],
         "admin": ["ver", "agregar", "editar", "eliminar", "admin"]
     }
     
@@ -169,12 +188,12 @@ def main():
     # Mostrar información del usuario
     rol_emoji = {
         "admin": "⚙️",
-        "editor": "✏️", 
         "lector": "👁️"
     }
     
     with st.sidebar:
-        st.success(f"{rol_emoji.get(st.session_state.user_role, '👤')} {st.session_state.current_user.title()} ({st.session_state.user_role})")
+        user_display_name = st.session_state.current_user.title()
+        st.success(f"{rol_emoji.get(st.session_state.user_role, '👤')} {user_display_name} ({st.session_state.user_role})")
         
         if st.button("🚪 Cerrar Sesión"):
             for key in ["password_correct", "user_role", "current_user", "inicializado"]:
@@ -263,104 +282,126 @@ def mostrar_dashboard():
 def gestionar_productos():
     st.header("📦 Gestión de Productos - COP")
     
-    # Determinar qué pestañas mostrar según permisos
-    tabs = []
-    if tiene_permiso("ver"):
-        tabs.append("📋 Ver Todos")
-    if tiene_permiso("agregar"):
-        tabs.append("➕ Agregar Nuevo")
-    if tiene_permiso("editar"):
-        tabs.append("✏️ Editar Productos")
-    
-    if not tabs:
-        st.warning("❌ No tienes permisos para ver productos")
+    # Para lectores: solo mostrar vista, sin pestañas
+    if st.session_state.user_role == "lector":
+        productos = obtener_productos()
+        if productos:
+            df = pd.DataFrame(productos)
+            df_show = df.copy()
+            df_show['precio'] = df_show['precio'].apply(formato_cop)
+            df_show['valor_total'] = (df['cantidad'] * df['precio']).apply(formato_cop)
+            st.dataframe(df_show, use_container_width=True)
+            
+            st.info("👁️ **Modo de solo lectura:** No tienes permisos para modificar productos.")
+        else:
+            st.info("No hay productos registrados")
         return
     
-    # Crear pestañas
-    created_tabs = st.tabs(tabs)
+    # Para administradores: mostrar pestañas completas
+    tabs = st.tabs(["📋 Ver Todos", "➕ Agregar Nuevo", "✏️ Editar Productos"])
     
-    # Pestaña: Ver Todos
-    if tiene_permiso("ver"):
-        with created_tabs[0]:
-            productos = obtener_productos()
-            if productos:
-                df = pd.DataFrame(productos)
-                df_show = df.copy()
-                df_show['precio'] = df_show['precio'].apply(formato_cop)
-                df_show['valor_total'] = (df['cantidad'] * df['precio']).apply(formato_cop)
-                st.dataframe(df_show, use_container_width=True)
-            else:
-                st.info("No hay productos registrados")
+    with tabs[0]:
+        productos = obtener_productos()
+        if productos:
+            df = pd.DataFrame(productos)
+            df_show = df.copy()
+            df_show['precio'] = df_show['precio'].apply(formato_cop)
+            df_show['valor_total'] = (df['cantidad'] * df['precio']).apply(formato_cop)
+            st.dataframe(df_show, use_container_width=True)
+            
+            # Exportar datos
+            csv = df.to_csv(index=False)
+            st.download_button("📥 Exportar CSV", csv, "inventario.csv", "text/csv")
+        else:
+            st.info("No hay productos registrados")
     
-    # Pestaña: Agregar Nuevo
-    if tiene_permiso("agregar") and len(tabs) > 1:
-        with created_tabs[1]:
-            st.subheader("Agregar Nuevo Producto")
-            categorias_actuales = obtener_categorias_actualizadas()
+    with tabs[1]:
+        st.subheader("Agregar Nuevo Producto")
+        categorias_actuales = obtener_categorias_actualizadas()
+        
+        if not categorias_actuales:
+            st.error("❌ No hay categorías disponibles.")
+            return
+        
+        with st.form("agregar_producto_form", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                nombre = st.text_input("Nombre del producto*")
+                categoria = st.selectbox("Categoría*", options=categorias_actuales)
+                precio = st.number_input("Precio unitario (COP)*", min_value=0, value=0, step=10000)
+            with col2:
+                cantidad = st.number_input("Cantidad inicial*", min_value=0, value=0)
+                proveedor = st.text_input("Proveedor")
+                min_stock = st.number_input("Stock mínimo alerta", min_value=0, value=5)
             
-            if not categorias_actuales:
-                st.error("❌ No hay categorías disponibles.")
-                return
-            
-            with st.form("agregar_producto_form", clear_on_submit=True):
-                col1, col2 = st.columns(2)
-                with col1:
-                    nombre = st.text_input("Nombre del producto*")
-                    categoria = st.selectbox("Categoría*", options=categorias_actuales)
-                    precio = st.number_input("Precio unitario (COP)*", min_value=0, value=0, step=10000)
-                with col2:
-                    cantidad = st.number_input("Cantidad inicial*", min_value=0, value=0)
-                    proveedor = st.text_input("Proveedor")
-                    min_stock = st.number_input("Stock mínimo alerta", min_value=0, value=5)
-                
-                if st.form_submit_button("➕ Agregar Producto"):
-                    if nombre and categoria and precio > 0:
-                        nuevo_producto = {
-                            "nombre": nombre.strip(),
-                            "categoria": categoria,
-                            "precio": precio,
-                            "cantidad": cantidad,
-                            "proveedor": proveedor.strip(),
-                            "min_stock": min_stock
-                        }
-                        try:
-                            result = supabase.table("inventario").insert(nuevo_producto).execute()
-                            if result.data:
-                                st.success("✅ Producto agregado exitosamente!")
+            if st.form_submit_button("➕ Agregar Producto"):
+                if nombre and categoria and precio > 0:
+                    nuevo_producto = {
+                        "nombre": nombre.strip(),
+                        "categoria": categoria,
+                        "precio": precio,
+                        "cantidad": cantidad,
+                        "proveedor": proveedor.strip(),
+                        "min_stock": min_stock
+                    }
+                    try:
+                        result = supabase.table("inventario").insert(nuevo_producto).execute()
+                        if result.data:
+                            st.success("✅ Producto agregado exitosamente!")
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error: {e}")
+    
+    with tabs[2]:
+        st.subheader("Editar Productos")
+        productos = obtener_productos()
+        
+        if productos:
+            for producto in productos:
+                with st.expander(f"📦 {producto['nombre']} - {formato_cop(producto['precio'])}"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write(f"**Categoría:** {producto['categoria']}")
+                        st.write(f"**Stock:** {producto['cantidad']:,} unidades".replace(",", "."))
+                    with col2:
+                        st.write(f"**Precio:** {formato_cop(producto['precio'])}")
+                        st.write(f"**Proveedor:** {producto.get('proveedor', 'N/A')}")
+                    
+                    with st.form(f"editar_{producto['id']}"):
+                        st.write("**Editar información:**")
+                        nuevo_nombre = st.text_input("Nombre", value=producto['nombre'], key=f"nombre_{producto['id']}")
+                        
+                        col_edit1, col_edit2 = st.columns(2)
+                        with col_edit1:
+                            nueva_cantidad = st.number_input("Cantidad", value=producto['cantidad'], key=f"cantidad_{producto['id']}")
+                            nuevo_precio = st.number_input("Precio (COP)", value=int(producto['precio']), key=f"precio_{producto['id']}", step=10000)
+                        
+                        with col_edit2:
+                            nuevo_proveedor = st.text_input("Proveedor", value=producto.get('proveedor', ''), key=f"proveedor_{producto['id']}")
+                            nuevo_min_stock = st.number_input("Stock mínimo", value=producto.get('min_stock', 5), key=f"minstock_{producto['id']}")
+                        
+                        if st.form_submit_button("💾 Guardar Cambios"):
+                            datos = {
+                                "nombre": nuevo_nombre,
+                                "cantidad": nueva_cantidad,
+                                "precio": nuevo_precio,
+                                "proveedor": nuevo_proveedor,
+                                "min_stock": nuevo_min_stock
+                            }
+                            try:
+                                supabase.table("inventario").update(datos).eq("id", producto['id']).execute()
+                                st.success("✅ Producto actualizado")
                                 st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Error: {e}")
+                    
+                    if st.button(f"🗑️ Eliminar Producto", key=f"eliminar_{producto['id']}"):
+                        try:
+                            supabase.table("inventario").delete().eq("id", producto['id']).execute()
+                            st.success("✅ Producto eliminado")
+                            st.rerun()
                         except Exception as e:
                             st.error(f"❌ Error: {e}")
-    
-    # Pestaña: Editar Productos
-    if tiene_permiso("editar") and len(tabs) > 2:
-        with created_tabs[2]:
-            st.subheader("Editar Productos")
-            productos = obtener_productos()
-            
-            if productos:
-                for producto in productos:
-                    with st.expander(f"📦 {producto['nombre']} - {formato_cop(producto['precio'])}"):
-                        with st.form(f"editar_{producto['id']}"):
-                            nuevo_nombre = st.text_input("Nombre", value=producto['nombre'], key=f"nombre_{producto['id']}")
-                            nueva_cantidad = st.number_input("Cantidad", value=producto['cantidad'], key=f"cantidad_{producto['id']}")
-                            
-                            if st.form_submit_button("💾 Guardar Cambios"):
-                                datos = {"nombre": nuevo_nombre, "cantidad": nueva_cantidad}
-                                try:
-                                    supabase.table("inventario").update(datos).eq("id", producto['id']).execute()
-                                    st.success("✅ Producto actualizado")
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"❌ Error: {e}")
-                        
-                        if tiene_permiso("eliminar"):
-                            if st.button(f"🗑️ Eliminar", key=f"eliminar_{producto['id']}"):
-                                try:
-                                    supabase.table("inventario").delete().eq("id", producto['id']).execute()
-                                    st.success("✅ Producto eliminado")
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"❌ Error: {e}")
 
 def mostrar_reportes():
     st.header("📈 Reportes e Analytics - COP")
@@ -413,36 +454,75 @@ def mostrar_reportes():
         st.bar_chart(valor_por_categoria)
 
 def mostrar_administracion():
-    if not tiene_permiso("admin"):
-        st.error("❌ No tienes permisos de administrador")
-        return
-    
     st.header("⚙️ Panel de Administración")
     
     st.subheader("👥 Usuarios del Sistema")
-    st.info("""
-    **Usuarios actuales:**
     
-    - ⚙️ **Administradores:** briget, admin
-    - ✏️ **Editores:** brian  
-    - 👁️ **Lectores:** ivan
+    # Mostrar tabla de usuarios actuales
+    usuarios_data = []
+    for usuario, info in USUARIOS.items():
+        usuarios_data.append({
+            "Usuario": usuario,
+            "Rol": info["rol"],
+            "Contraseña": info["password"]
+        })
+    
+    usuarios_df = pd.DataFrame(usuarios_data)
+    st.dataframe(usuarios_df, use_container_width=True)
+    
+    st.info("""
+    **📋 Resumen de permisos:**
+    
+    **⚙️ Administradores (4 usuarios):**
+    - David, Briget, Brian, Ivan
+    - Acceso completo a todas las funciones
+    
+    **👁️ Lectores (2 usuarios):**
+    - lector, invitado  
+    - Solo pueden ver productos y reportes
+    - No pueden modificar, agregar ni eliminar
     """)
     
     st.subheader("🔧 Configuración del Sistema")
-    if st.button("🔄 Reinicializar Datos de Ejemplo"):
-        try:
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🔄 Reinicializar Datos de Ejemplo", type="secondary"):
+            try:
+                # Eliminar todos los productos
+                productos = obtener_productos()
+                for producto in productos:
+                    supabase.table("inventario").delete().eq("id", producto['id']).execute()
+                
+                # Insertar datos de ejemplo
+                insertar_datos_ejemplo()
+                st.success("✅ Sistema reinicializado correctamente")
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Error: {e}")
+    
+    with col2:
+        if st.button("📊 Generar Reporte Completo", type="primary"):
             productos = obtener_productos()
-            for producto in productos:
-                supabase.table("inventario").delete().eq("id", producto['id']).execute()
-            insertar_datos_ejemplo()
-            st.success("✅ Sistema reinicializado correctamente")
-            st.rerun()
-        except Exception as e:
-            st.error(f"❌ Error: {e}")
+            if productos:
+                df = pd.DataFrame(productos)
+                df['valor_total'] = df['cantidad'] * df['precio']
+                
+                # Crear reporte detallado
+                reporte = df[['nombre', 'categoria', 'cantidad', 'precio', 'valor_total', 'proveedor']]
+                csv = reporte.to_csv(index=False)
+                
+                st.download_button(
+                    "📥 Descargar Reporte CSV",
+                    csv,
+                    f"reporte_inventario_{datetime.now().strftime('%Y-%m-%d')}.csv",
+                    "text/csv"
+                )
+            else:
+                st.warning("No hay datos para generar reporte")
 
 # Inicializar Supabase
 supabase = get_supabase_client()
 
 if __name__ == "__main__":
     main()
-
