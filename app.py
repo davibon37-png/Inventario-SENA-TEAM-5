@@ -234,7 +234,7 @@ def main():
         mostrar_administracion()
 
 def mostrar_dashboard():
-    st.header("📊 Dashboard de Inventario - COP")
+    st.header("📊 Dashboard de Inventario")
     
     productos = obtener_productos()
     if not productos:
@@ -275,12 +275,12 @@ def mostrar_dashboard():
         st.bar_chart(stock_categoria)
     
     with col2:
-        st.subheader("Valor por Categoría (COP)")
+        st.subheader("Valor por Categoría")
         valor_categoria = df.groupby('categoria')['valor_total'].sum()
         st.bar_chart(valor_categoria)
 
 def gestionar_productos():
-    st.header("📦 Gestión de Productos - COP")
+    st.header("📦 Gestión de Productos")
     
     # Para lectores: solo mostrar vista, sin pestañas
     if st.session_state.user_role == "lector":
@@ -404,7 +404,7 @@ def gestionar_productos():
                             st.error(f"❌ Error: {e}")
 
 def mostrar_reportes():
-    st.header("📈 Reportes e Analytics - COP")
+    st.header("📈 Reportes y análisis")
     
     productos = obtener_productos()
     if not productos:
@@ -526,3 +526,4 @@ supabase = get_supabase_client()
 
 if __name__ == "__main__":
     main()
+
