@@ -18,25 +18,42 @@ USUARIOS = {
 
 # ================== 🔧 FUNCIONES BASE DE DATOS ==================
 
-def obtener_productos():
+def obtener_proveedores():
+    """Obtener lista de proveedores desde la base de datos"""
     try:
-        response = supabase.table("inventario").select("*").order("id").execute()
+        response = supabase.table("proveedores").select("id, nombre").execute()
+        return response.data if response.data else []
+    except Exception as e:
+        st.error(f"Error al obtener proveedores: {e}")
+        return []
+
+def obtener_productos():
+    """Obtener productos con información de proveedores"""
+    try:
+        response = supabase.table("inventario").select("*, proveedores!inner(nombre)").execute()
         return response.data if response.data else []
     except Exception as e:
         st.error(f"Error al obtener productos: {e}")
-        return []
+        # Fallback: obtener sin join
+        try:
+            response = supabase.table("inventario").select("*").execute()
+            return response.data if response.data else []
+        except:
+            return []
 
 def obtener_categorias():
+    """Obtener categorías únicas de productos"""
     try:
         response = supabase.table("inventario").select("categoria").execute()
         if response.data:
             categorias = list(set([item['categoria'] for item in response.data if item.get('categoria')]))
             return sorted([cat for cat in categorias if cat])
-        return ["Tecnología", "Mobiliario", "Insumos", "Oficina"]
+        return ["Tecnología", "Mobiliario", "Accesorios", "Insumos"]
     except:
-        return ["Tecnología", "Mobiliario", "Insumos", "Oficina"]
+        return ["Tecnología", "Mobiliario", "Accesorios", "Insumos"]
 
-def agregar_producto(nombre, cantidad, categoria, precio, proveedor):
+def agregar_producto(nombre, cantidad, categoria, precio, proveedor_id):
+    """Agregar nuevo producto usando proveedor_id"""
     try:
         # Obtener máximo ID
         max_response = supabase.table("inventario").select("id").order("id", desc=True).limit(1).execute()
@@ -48,48 +65,53 @@ def agregar_producto(nombre, cantidad, categoria, precio, proveedor):
             "categoria": categoria,
             "precio": precio,
             "cantidad": cantidad,
-            "proveedor": proveedor.strip(),
+            "proveedor_id": proveedor_id,  # ← CORREGIDO: usar proveedor_id
             "fecha_actualizacion": datetime.now().isoformat()
         }
         
         response = supabase.table("inventario").insert(producto_data).execute()
         return bool(response.data)
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Error al agregar producto: {e}")
         return False
 
 def actualizar_producto(producto_id, datos):
+    """Actualizar producto"""
     try:
         datos['fecha_actualizacion'] = datetime.now().isoformat()
         response = supabase.table("inventario").update(datos).eq("id", producto_id).execute()
         return True
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Error al actualizar: {e}")
         return False
 
 def eliminar_producto(producto_id):
+    """Eliminar producto"""
     try:
         response = supabase.table("inventario").delete().eq("id", producto_id).execute()
         return True
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Error al eliminar: {e}")
         return False
 
 def insertar_datos_ejemplo():
+    """Insertar datos de ejemplo usando proveedor_id"""
     try:
         productos = obtener_productos()
         if not productos:
+            # Usar proveedor_id = 1 (HP Inc.) para todos los productos de ejemplo
             datos_ejemplo = [
-                {"nombre": "Laptop HP Pavilion", "cantidad": 15, "categoria": "Tecnología", "proveedor": "HP Inc.", "precio": 3500000},
-                {"nombre": "Mouse Inalámbrico", "cantidad": 50, "categoria": "Tecnología", "proveedor": "Logitech", "precio": 120000},
-                {"nombre": "Monitor 24 Pulgadas", "cantidad": 8, "categoria": "Tecnología", "proveedor": "Samsung", "precio": 850000},
-                {"nombre": "Silla de Oficina", "cantidad": 12, "categoria": "Mobiliario", "proveedor": "ErgoChair", "precio": 450000},
+                {"nombre": "Laptop HP Pavilion", "cantidad": 15, "categoria": "Tecnología", "proveedor_id": 1, "precio": 3500000},
+                {"nombre": "Mouse Inalámbrico", "cantidad": 50, "categoria": "Accesorios", "proveedor_id": 2, "precio": 120000},
+                {"nombre": "Monitor 24 Pulgadas", "cantidad": 8, "categoria": "Tecnología", "proveedor_id": 3, "precio": 850000},
+                {"nombre": "Silla de Oficina", "cantidad": 12, "categoria": "Mobiliario", "proveedor_id": 4, "precio": 450000},
             ]
             for producto in datos_ejemplo:
                 supabase.table("inventario").insert(producto).execute()
             return True
-    except:
-        return False
+    except Exception as e:
+        st.error(f"Error insertando datos: {e}")
+    return False
 
 # ================== 🔐 AUTENTICACIÓN ==================
 
@@ -184,13 +206,18 @@ def mostrar_dashboard():
     # Crear DataFrame seguro
     df_data = []
     for p in productos:
+        # Manejar proveedor (puede venir de la relación)
+        proveedor_nombre = "N/A"
+        if 'proveedores' in p and p['proveedores']:
+            proveedor_nombre = p['proveedores'].get('nombre', 'N/A')
+        
         df_data.append({
             'id': p.get('id', 0),
             'nombre': p.get('nombre', 'Sin nombre'),
             'cantidad': p.get('cantidad', 0),
             'categoria': p.get('categoria', 'Sin categoría'),
             'precio': p.get('precio', 0),
-            'proveedor': p.get('proveedor', 'N/A')
+            'proveedor': proveedor_nombre
         })
     df = pd.DataFrame(df_data)
     
@@ -228,7 +255,22 @@ def gestionar_productos():
     if st.session_state.get("user_role") == "lector":
         productos = obtener_productos()
         if productos:
-            df = pd.DataFrame(productos)
+            # Crear DataFrame para visualización
+            df_data = []
+            for p in productos:
+                proveedor_nombre = "N/A"
+                if 'proveedores' in p and p['proveedores']:
+                    proveedor_nombre = p['proveedores'].get('nombre', 'N/A')
+                
+                df_data.append({
+                    'id': p.get('id', 0),
+                    'nombre': p.get('nombre', ''),
+                    'categoria': p.get('categoria', ''),
+                    'cantidad': p.get('cantidad', 0),
+                    'precio': p.get('precio', 0),
+                    'proveedor': proveedor_nombre
+                })
+            df = pd.DataFrame(df_data)
             st.dataframe(df, use_container_width=True)
             st.info("👁️ **Modo de solo lectura**")
         else:
@@ -240,7 +282,21 @@ def gestionar_productos():
     with tab1:
         productos = obtener_productos()
         if productos:
-            df = pd.DataFrame(productos)
+            df_data = []
+            for p in productos:
+                proveedor_nombre = "N/A"
+                if 'proveedores' in p and p['proveedores']:
+                    proveedor_nombre = p['proveedores'].get('nombre', 'N/A')
+                
+                df_data.append({
+                    'id': p.get('id', 0),
+                    'nombre': p.get('nombre', ''),
+                    'categoria': p.get('categoria', ''),
+                    'cantidad': p.get('cantidad', 0),
+                    'precio': p.get('precio', 0),
+                    'proveedor': proveedor_nombre
+                })
+            df = pd.DataFrame(df_data)
             st.dataframe(df, use_container_width=True)
             
             csv = df.to_csv(index=False)
@@ -251,6 +307,7 @@ def gestionar_productos():
     with tab2:
         st.subheader("Agregar Nuevo Producto")
         categorias = obtener_categorias()
+        proveedores = obtener_proveedores()
         
         with st.form("agregar_form", clear_on_submit=True):
             col1, col2 = st.columns(2)
@@ -260,28 +317,41 @@ def gestionar_productos():
                 precio = st.number_input("Precio (COP)*", min_value=0, value=0, step=10000)
             with col2:
                 cantidad = st.number_input("Cantidad*", min_value=0, value=0)
-                proveedor = st.text_input("Proveedor")
+                # Select de proveedores
+                if proveedores:
+                    opciones_proveedores = {f"{p['nombre']}": p['id'] for p in proveedores}
+                    proveedor_seleccionado = st.selectbox("Proveedor*", options=list(opciones_proveedores.keys()))
+                    proveedor_id = opciones_proveedores[proveedor_seleccionado]
+                else:
+                    st.warning("No hay proveedores disponibles")
+                    proveedor_id = None
             
             if st.form_submit_button("➕ Agregar Producto"):
-                if nombre and precio > 0:
-                    if agregar_producto(nombre, cantidad, categoria, precio, proveedor):
+                if nombre and precio > 0 and proveedor_id is not None:
+                    if agregar_producto(nombre, cantidad, categoria, precio, proveedor_id):
                         st.rerun()
                 else:
-                    st.error("❌ Nombre y precio son requeridos")
+                    st.error("❌ Todos los campos requeridos deben ser completados")
     
     with tab3:
         st.subheader("Editar Productos")
         productos = obtener_productos()
+        proveedores = obtener_proveedores()
         
         for producto in productos:
-            with st.expander(f"📦 {producto.get('nombre', 'Sin nombre')}"):
+            # Obtener nombre del proveedor actual
+            proveedor_actual_nombre = "N/A"
+            if 'proveedores' in producto and producto['proveedores']:
+                proveedor_actual_nombre = producto['proveedores'].get('nombre', 'N/A')
+            
+            with st.expander(f"📦 {producto.get('nombre', 'Sin nombre')} - {proveedor_actual_nombre}"):
                 col1, col2 = st.columns(2)
                 with col1:
                     st.write(f"**Categoría:** {producto.get('categoria', 'N/A')}")
                     st.write(f"**Stock:** {producto.get('cantidad', 0):,} uds".replace(",", "."))
                 with col2:
                     st.write(f"**Precio:** ${producto.get('precio', 0):,}".replace(",", "."))
-                    st.write(f"**Proveedor:** {producto.get('proveedor', 'N/A')}")
+                    st.write(f"**Proveedor:** {proveedor_actual_nombre}")
                 
                 with st.form(f"editar_{producto['id']}"):
                     nuevo_nombre = st.text_input("Nombre", value=producto.get('nombre', ''), key=f"n_{producto['id']}")
@@ -290,14 +360,30 @@ def gestionar_productos():
                         nueva_cantidad = st.number_input("Cantidad", value=producto.get('cantidad', 0), key=f"c_{producto['id']}")
                         nuevo_precio = st.number_input("Precio", value=producto.get('precio', 0), key=f"p_{producto['id']}")
                     with col2:
-                        nuevo_proveedor = st.text_input("Proveedor", value=producto.get('proveedor', ''), key=f"prov_{producto['id']}")
+                        # Select de proveedores para edición
+                        if proveedores:
+                            opciones_proveedores = {f"{p['nombre']}": p['id'] for p in proveedores}
+                            # Encontrar el proveedor actual
+                            proveedor_actual_id = producto.get('proveedor_id')
+                            nombre_proveedor_actual = next((p['nombre'] for p in proveedores if p['id'] == proveedor_actual_id), list(opciones_proveedores.keys())[0])
+                            
+                            nuevo_proveedor_nombre = st.selectbox(
+                                "Proveedor", 
+                                options=list(opciones_proveedores.keys()),
+                                index=list(opciones_proveedores.keys()).index(nombre_proveedor_actual) if nombre_proveedor_actual in opciones_proveedores else 0,
+                                key=f"prov_{producto['id']}"
+                            )
+                            nuevo_proveedor_id = opciones_proveedores[nuevo_proveedor_nombre]
+                        else:
+                            st.warning("No hay proveedores")
+                            nuevo_proveedor_id = producto.get('proveedor_id')
                     
                     if st.form_submit_button("💾 Guardar"):
                         datos = {
                             "nombre": nuevo_nombre,
                             "cantidad": nueva_cantidad,
                             "precio": nuevo_precio,
-                            "proveedor": nuevo_proveedor
+                            "proveedor_id": nuevo_proveedor_id  # ← CORREGIDO
                         }
                         if actualizar_producto(producto['id'], datos):
                             st.rerun()
@@ -316,12 +402,17 @@ def mostrar_reportes():
     
     df_data = []
     for p in productos:
+        proveedor_nombre = "N/A"
+        if 'proveedores' in p and p['proveedores']:
+            proveedor_nombre = p['proveedores'].get('nombre', 'N/A')
+        
         df_data.append({
             'id': p.get('id', 0),
             'nombre': p.get('nombre', ''),
             'categoria': p.get('categoria', ''),
             'cantidad': p.get('cantidad', 0),
-            'precio': p.get('precio', 0)
+            'precio': p.get('precio', 0),
+            'proveedor': proveedor_nombre
         })
     df = pd.DataFrame(df_data)
     df['valor_total'] = df['cantidad'] * df['precio']
@@ -382,7 +473,20 @@ def mostrar_administracion():
         if st.button("📊 Generar Reporte"):
             productos = obtener_productos()
             if productos:
-                df = pd.DataFrame(productos)
+                df_data = []
+                for p in productos:
+                    proveedor_nombre = "N/A"
+                    if 'proveedores' in p and p['proveedores']:
+                        proveedor_nombre = p['proveedores'].get('nombre', 'N/A')
+                    
+                    df_data.append({
+                        'nombre': p.get('nombre', ''),
+                        'categoria': p.get('categoria', ''),
+                        'cantidad': p.get('cantidad', 0),
+                        'precio': p.get('precio', 0),
+                        'proveedor': proveedor_nombre
+                    })
+                df = pd.DataFrame(df_data)
                 csv = df.to_csv(index=False)
                 st.download_button(
                     "📥 Descargar CSV",
