@@ -109,11 +109,19 @@ def tiene_permiso(permiso_requerido):
     user_role = st.session_state.get("user_role", "lector")
     return permiso_requerido in roles_permisos.get(user_role, ["ver"])
 
-# ================== 🔧 FUNCIONES ACTUALIZADAS CON NUEVA BASE DE DATOS ==================
+# ================== 🔧 SOLO LAS FUNCIONES CRÍTICAS CORREGIDAS ==================
 
-# Función para obtener categorías actualizadas
+# Función para obtener productos (CONSULTA SIMPLE SIN JOINS)
+def obtener_productos():
+    try:
+        response = supabase.table("inventario").select("*").order("id").execute()
+        return response.data
+    except Exception as e:
+        st.error(f"Error al obtener productos: {e}")
+        return []
+
+# Función para obtener categorías
 def obtener_categorias_actualizadas():
-    """Obtiene categorías directamente de la base de datos"""
     try:
         response = supabase.table("inventario").select("categoria").execute()
         if response.data:
@@ -124,51 +132,16 @@ def obtener_categorias_actualizadas():
         st.error(f"Error al obtener categorías: {e}")
         return []
 
-# Función para obtener todos los productos CON RELACIONES CORREGIDAS
-def obtener_productos():
+# Función para agregar producto (MANTIENE EL CAMPO PROVEEDOR COMO TEXTO)
+def agregar_producto(nombre, cantidad, categoria, precio, proveedor, min_stock):
     try:
-        # Consulta segura con join corregido
-        response = supabase.table("inventario").select("""
-            id, nombre, cantidad, categoria, precio, activo, fecha_actualizacion,
-            proveedores (id, nombre, telefono, email)
-        """).execute()
-        
-        return response.data if hasattr(response, 'data') else []
-            
-    except Exception as e:
-        st.error(f"Error al obtener productos: {e}")
-        # Fallback seguro
-        try:
-            response = supabase.table("inventario").select("*").execute()
-            return response.data if hasattr(response, 'data') else []
-        except:
-            return []
-
-# Función para obtener proveedores
-def obtener_proveedores():
-    try:
-        response = supabase.table("proveedores").select("*").eq("activo", True).execute()
-        return response.data if hasattr(response, 'data') else []
-    except Exception as e:
-        st.error(f"Error al obtener proveedores: {e}")
-        return []
-
-# Función para agregar producto ACTUALIZADA
-def agregar_producto(nombre, cantidad, categoria, precio, proveedor_id):
-    try:
-        # Obtener el máximo ID actual para evitar duplicados
-        max_response = supabase.table("inventario").select("id").order("id", desc=True).limit(1).execute()
-        next_id = 1
-        if max_response.data:
-            next_id = max_response.data[0]['id'] + 1
-
         producto_data = {
-            "id": next_id,
-            "nombre": nombre,
-            "cantidad": cantidad,
+            "nombre": nombre.strip(),
             "categoria": categoria,
-            "precio": float(precio),
-            "proveedor_id": proveedor_id,
+            "precio": precio,
+            "cantidad": cantidad,
+            "proveedor": proveedor.strip(),
+            "min_stock": min_stock,
             "fecha_actualizacion": datetime.now().isoformat()
         }
         
@@ -185,50 +158,37 @@ def agregar_producto(nombre, cantidad, categoria, precio, proveedor_id):
         st.error(f"❌ Error: {e}")
         return False
 
-# Función para agregar proveedor
-def agregar_proveedor(nombre, contacto, telefono, email, direccion):
+# Función para actualizar producto
+def actualizar_producto(producto_id, datos):
     try:
-        proveedor_data = {
-            "nombre": nombre,
-            "contacto": contacto,
-            "telefono": telefono,
-            "email": email,
-            "direccion": direccion
-        }
-        
-        response = supabase.table("proveedores").insert(proveedor_data).execute()
-        
-        if hasattr(response, 'data') and response.data:
-            st.success("✅ Proveedor agregado exitosamente!")
-            return True
-        else:
-            st.error("❌ Error al agregar proveedor")
-            return False
-            
+        datos['fecha_actualizacion'] = datetime.now().isoformat()
+        supabase.table("inventario").update(datos).eq("id", producto_id).execute()
+        return True
     except Exception as e:
-        st.error(f"❌ Error: {e}")
+        st.error(f"Error al actualizar: {e}")
         return False
 
-# Función para insertar datos de ejemplo ACTUALIZADA
+# Función para eliminar producto
+def eliminar_producto(producto_id):
+    try:
+        supabase.table("inventario").delete().eq("id", producto_id).execute()
+        return True
+    except Exception as e:
+        st.error(f"Error al eliminar: {e}")
+        return False
+
+# Función para insertar datos de ejemplo (USA PROVEEDOR COMO TEXTO)
 def insertar_datos_ejemplo():
     try:
         productos = obtener_productos()
         if not productos:
-            # Obtener proveedores existentes
-            proveedores = obtener_proveedores()
-            if not proveedores:
-                st.error("No hay proveedores en la base de datos")
-                return False
-                
-            proveedor_id = proveedores[0]['id']  # Usar el primer proveedor disponible
-            
             datos_ejemplo = [
-                {"nombre": "Laptop HP Pavilion", "cantidad": 15, "categoria": "Tecnología", "proveedor_id": proveedor_id, "precio": 3500000, "min_stock": 5},
-                {"nombre": "Mouse Inalámbrico", "cantidad": 50, "categoria": "Tecnología", "proveedor_id": proveedor_id, "precio": 120000, "min_stock": 10},
-                {"nombre": "Monitor 24 Pulgadas", "cantidad": 8, "categoria": "Tecnología", "proveedor_id": proveedor_id, "precio": 850000, "min_stock": 3},
-                {"nombre": "Silla de Oficina", "cantidad": 12, "categoria": "Mobiliario", "proveedor_id": proveedor_id, "precio": 450000, "min_stock": 2},
-                {"nombre": "Escritorio Ejecutivo", "cantidad": 5, "categoria": "Mobiliario", "proveedor_id": proveedor_id, "precio": 1200000, "min_stock": 1},
-                {"nombre": "Tóner Negro", "cantidad": 25, "categoria": "Insumos", "proveedor_id": proveedor_id, "precio": 180000, "min_stock": 15},
+                {"nombre": "Laptop HP Pavilion", "cantidad": 15, "categoria": "Tecnología", "proveedor": "HP Inc.", "precio": 3500000, "min_stock": 5},
+                {"nombre": "Mouse Inalámbrico", "cantidad": 50, "categoria": "Tecnología", "proveedor": "Logitech", "precio": 120000, "min_stock": 10},
+                {"nombre": "Monitor 24 Pulgadas", "cantidad": 8, "categoria": "Tecnología", "proveedor": "Samsung", "precio": 850000, "min_stock": 3},
+                {"nombre": "Silla de Oficina", "cantidad": 12, "categoria": "Mobiliario", "proveedor": "ErgoChair", "precio": 450000, "min_stock": 2},
+                {"nombre": "Escritorio Ejecutivo", "cantidad": 5, "categoria": "Mobiliario", "proveedor": "OfficeMax", "precio": 1200000, "min_stock": 1},
+                {"nombre": "Tóner Negro", "cantidad": 25, "categoria": "Insumos", "proveedor": "Canon", "precio": 180000, "min_stock": 15},
             ]
             
             for producto in datos_ejemplo:
@@ -239,25 +199,7 @@ def insertar_datos_ejemplo():
         st.error(f"Error: {e}")
     return False
 
-# Funciones CRUD ACTUALIZADAS
-def actualizar_producto(producto_id, datos):
-    try:
-        datos['fecha_actualizacion'] = datetime.now().isoformat()
-        supabase.table("inventario").update(datos).eq("id", producto_id).execute()
-        return True
-    except Exception as e:
-        st.error(f"Error al actualizar: {e}")
-        return False
-
-def eliminar_producto(producto_id):
-    try:
-        supabase.table("inventario").delete().eq("id", producto_id).execute()
-        return True
-    except Exception as e:
-        st.error(f"Error al eliminar: {e}")
-        return False
-
-# ================== 🎨 INTERFAZ PRINCIPAL (MISMO DISEÑO) ==================
+# ================== 🎨 INTERFAZ ORIGINAL (EXACTAMENTE IGUAL) ==================
 
 def main():
     # Verificar login
@@ -377,13 +319,6 @@ def gestionar_productos():
             df_show = df.copy()
             df_show['precio'] = df_show['precio'].apply(formato_cop)
             df_show['valor_total'] = (df['cantidad'] * df['precio']).apply(formato_cop)
-            
-            # Manejar proveedores en la visualización
-            if 'proveedores' in df_show.columns:
-                df_show['proveedor_nombre'] = df_show['proveedores'].apply(
-                    lambda x: x.get('nombre', 'N/A') if x else 'N/A'
-                )
-            
             st.dataframe(df_show, use_container_width=True)
             
             st.info("👁️ **Modo de solo lectura:** No tienes permisos para modificar productos.")
@@ -401,13 +336,6 @@ def gestionar_productos():
             df_show = df.copy()
             df_show['precio'] = df_show['precio'].apply(formato_cop)
             df_show['valor_total'] = (df['cantidad'] * df['precio']).apply(formato_cop)
-            
-            # Manejar proveedores en la visualización
-            if 'proveedores' in df_show.columns:
-                df_show['proveedor_nombre'] = df_show['proveedores'].apply(
-                    lambda x: x.get('nombre', 'N/A') if x else 'N/A'
-                )
-            
             st.dataframe(df_show, use_container_width=True)
             
             # Exportar datos
@@ -419,7 +347,6 @@ def gestionar_productos():
     with tabs[1]:
         st.subheader("Agregar Nuevo Producto")
         categorias_actuales = obtener_categorias_actualizadas()
-        proveedores = obtener_proveedores()
         
         if not categorias_actuales:
             st.error("❌ No hay categorías disponibles.")
@@ -433,36 +360,26 @@ def gestionar_productos():
                 precio = st.number_input("Precio unitario (COP)*", min_value=0, value=0, step=10000)
             with col2:
                 cantidad = st.number_input("Cantidad inicial*", min_value=0, value=0)
-                
-                # Selectbox para proveedores
-                if proveedores:
-                    opciones_proveedores = {f"{p['id']} - {p['nombre']}": p['id'] for p in proveedores}
-                    proveedor_seleccionado = st.selectbox("Proveedor*", options=list(opciones_proveedores.keys()))
-                    proveedor_id = opciones_proveedores[proveedor_seleccionado]
-                else:
-                    st.warning("No hay proveedores disponibles")
-                    proveedor_id = None
-                
+                proveedor = st.text_input("Proveedor")
                 min_stock = st.number_input("Stock mínimo alerta", min_value=0, value=5)
             
             if st.form_submit_button("➕ Agregar Producto"):
-                if nombre and categoria and precio > 0 and proveedor_id is not None:
+                if nombre and categoria and precio > 0:
                     nuevo_producto = {
                         "nombre": nombre.strip(),
                         "categoria": categoria,
                         "precio": precio,
                         "cantidad": cantidad,
-                        "proveedor_id": proveedor_id,
+                        "proveedor": proveedor.strip(),
                         "min_stock": min_stock
                     }
                     try:
-                        result = agregar_producto(nombre, cantidad, categoria, precio, proveedor_id)
-                        if result:
+                        result = supabase.table("inventario").insert(nuevo_producto).execute()
+                        if result.data:
+                            st.success("✅ Producto agregado exitosamente!")
                             st.rerun()
                     except Exception as e:
                         st.error(f"❌ Error: {e}")
-                else:
-                    st.error("❌ Por favor completa todos los campos requeridos")
     
     with tabs[2]:
         st.subheader("Editar Productos")
@@ -477,10 +394,7 @@ def gestionar_productos():
                         st.write(f"**Stock:** {producto['cantidad']:,} unidades".replace(",", "."))
                     with col2:
                         st.write(f"**Precio:** {formato_cop(producto['precio'])}")
-                        # Mostrar proveedor
-                        proveedor_info = producto.get('proveedores', {})
-                        proveedor_nombre = proveedor_info.get('nombre', 'N/A') if proveedor_info else 'N/A'
-                        st.write(f"**Proveedor:** {proveedor_nombre}")
+                        st.write(f"**Proveedor:** {producto.get('proveedor', 'N/A')}")
                     
                     with st.form(f"editar_{producto['id']}"):
                         st.write("**Editar información:**")
@@ -492,20 +406,7 @@ def gestionar_productos():
                             nuevo_precio = st.number_input("Precio (COP)", value=int(producto['precio']), key=f"precio_{producto['id']}", step=10000)
                         
                         with col_edit2:
-                            # Selectbox para proveedores en edición
-                            proveedores_edicion = obtener_proveedores()
-                            if proveedores_edicion:
-                                opciones_proveedores_edicion = {f"{p['id']} - {p['nombre']}": p['id'] for p in proveedores_edicion}
-                                proveedor_actual = producto.get('proveedor_id')
-                                proveedor_actual_nombre = next((f"{p['id']} - {p['nombre']}" for p in proveedores_edicion if p['id'] == proveedor_actual), list(opciones_proveedores_edicion.keys())[0])
-                                nuevo_proveedor = st.selectbox("Proveedor", options=list(opciones_proveedores_edicion.keys()), 
-                                                             index=list(opciones_proveedores_edicion.keys()).index(proveedor_actual_nombre) if proveedor_actual_nombre in opciones_proveedores_edicion else 0,
-                                                             key=f"proveedor_{producto['id']}")
-                                nuevo_proveedor_id = opciones_proveedores_edicion[nuevo_proveedor]
-                            else:
-                                st.warning("No hay proveedores")
-                                nuevo_proveedor_id = producto.get('proveedor_id')
-                            
+                            nuevo_proveedor = st.text_input("Proveedor", value=producto.get('proveedor', ''), key=f"proveedor_{producto['id']}")
                             nuevo_min_stock = st.number_input("Stock mínimo", value=producto.get('min_stock', 5), key=f"minstock_{producto['id']}")
                         
                         if st.form_submit_button("💾 Guardar Cambios"):
@@ -513,11 +414,11 @@ def gestionar_productos():
                                 "nombre": nuevo_nombre,
                                 "cantidad": nueva_cantidad,
                                 "precio": nuevo_precio,
-                                "proveedor_id": nuevo_proveedor_id,
+                                "proveedor": nuevo_proveedor,
                                 "min_stock": nuevo_min_stock
                             }
                             try:
-                                actualizar_producto(producto['id'], datos)
+                                supabase.table("inventario").update(datos).eq("id", producto['id']).execute()
                                 st.success("✅ Producto actualizado")
                                 st.rerun()
                             except Exception as e:
@@ -525,7 +426,7 @@ def gestionar_productos():
                     
                     if st.button(f"🗑️ Eliminar Producto", key=f"eliminar_{producto['id']}"):
                         try:
-                            eliminar_producto(producto['id'])
+                            supabase.table("inventario").delete().eq("id", producto['id']).execute()
                             st.success("✅ Producto eliminado")
                             st.rerun()
                         except Exception as e:
@@ -637,7 +538,7 @@ def mostrar_administracion():
                 df['valor_total'] = df['cantidad'] * df['precio']
                 
                 # Crear reporte detallado
-                reporte = df[['nombre', 'categoria', 'cantidad', 'precio', 'valor_total']]
+                reporte = df[['nombre', 'categoria', 'cantidad', 'precio', 'valor_total', 'proveedor']]
                 csv = reporte.to_csv(index=False)
                 
                 st.download_button(
