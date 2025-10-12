@@ -139,7 +139,7 @@ def check_password():
                 st.error("❌ Usuario o contraseña incorrectos")
     
     with st.expander("📋 Usuarios de Prueba"):
-        st.write("**Administradores:** david, briget, brian, ivan)
+        st.write("**Administradores:** david/david123, briget/briget123, brian/brian123, ivan/ivan123")
         st.write("**Lectores:** lector/lector123, invitado/invitado123")
     
     return False
@@ -526,5 +526,3 @@ def mostrar_administracion():
 if __name__ == "__main__":
     supabase = get_supabase_client()
     main()
-
-
