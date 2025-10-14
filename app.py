@@ -6,7 +6,7 @@ from datetime import datetime
 # Configuración de la página
 st.set_page_config(page_title="Sistema de Inventario", layout="wide")
 
-# ================== 🎯 USUARIOS ==================
+# ==================  USUARIOS ==================
 USUARIOS = {
     "david": {"password": "david123", "rol": "admin"},
     "briget": {"password": "briget123", "rol": "admin"},
@@ -16,7 +16,7 @@ USUARIOS = {
     "invitado": {"password": "invitado123", "rol": "lector"}
 }
 
-# ================== 🔧 FUNCIONES BASE DE DATOS ==================
+# ==================  FUNCIONES BASE DE DATOS ==================
 
 def obtener_proveedores():
     """Obtener lista de proveedores desde la base de datos"""
@@ -113,7 +113,7 @@ def insertar_datos_ejemplo():
         st.error(f"Error insertando datos: {e}")
     return False
 
-# ================== 🔐 AUTENTICACIÓN ==================
+# ==================  AUTENTICACIÓN ==================
 
 def check_password():
     if st.session_state.get("password_correct"):
@@ -152,7 +152,7 @@ def tiene_permiso(permiso_requerido):
     user_role = st.session_state.get("user_role", "lector")
     return permiso_requerido in roles_permisos.get(user_role, ["ver"])
 
-# ================== 🎨 INTERFAZ ==================
+# ==================  INTERFAZ ==================
 
 def main():
     if not check_password():
@@ -206,7 +206,7 @@ def mostrar_dashboard():
     # Crear DataFrame seguro
     df_data = []
     for p in productos:
-        # Manejar proveedor (puede venir de la relación)
+        # Manejar proveedor 
         proveedor_nombre = "N/A"
         if 'proveedores' in p and p['proveedores']:
             proveedor_nombre = p['proveedores'].get('nombre', 'N/A')
@@ -338,7 +338,7 @@ def gestionar_productos():
         productos = obtener_productos()
         proveedores = obtener_proveedores()
         
-        # 🔍 BARRA DE BÚSQUEDA - AÑADIDO
+        #  BARRA DE BÚSQUEDA - AÑADIDO
         st.markdown("### 🔍 Buscar Productos")
         busqueda = st.text_input("Buscar por nombre, categoría o proveedor:", 
                                placeholder="Escribe para filtrar productos...",
@@ -526,3 +526,4 @@ def mostrar_administracion():
 if __name__ == "__main__":
     supabase = get_supabase_client()
     main()
+
