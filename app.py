@@ -1,12 +1,12 @@
 import streamlit as st
 from utils.supabase_client import get_supabase_client
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Configuración de la página
 st.set_page_config(page_title="Sistema de Inventario", layout="wide")
 
-# ==================  USUARIOS ==================
+# ================== 🎯 USUARIOS ==================
 USUARIOS = {
     "david": {"password": "david123", "rol": "admin"},
     "briget": {"password": "briget123", "rol": "admin"},
@@ -16,15 +16,51 @@ USUARIOS = {
     "invitado": {"password": "invitado123", "rol": "lector"}
 }
 
-# ==================  FUNCIONES BASE DE DATOS ==================
+# ================== 🔧 FUNCIONES BASE DE DATOS ==================
 
 def obtener_proveedores():
     """Obtener lista de proveedores desde la base de datos"""
     try:
-        response = supabase.table("proveedores").select("id, nombre").execute()
+        response = supabase.table("proveedores").select("*").order("id").execute()
         return response.data if response.data else []
     except Exception as e:
         st.error(f"Error al obtener proveedores: {e}")
+        return []
+
+def obtener_clientes():
+    """Obtener lista de clientes desde la base de datos"""
+    try:
+        response = supabase.table("clientes").select("*").order("id").execute()
+        return response.data if response.data else []
+    except Exception as e:
+        st.error(f"Error al obtener clientes: {e}")
+        return []
+
+def obtener_ventas():
+    """Obtener ventas con información de clientes"""
+    try:
+        response = supabase.table("ventas").select("*, clientes(*)").order("fecha_venta", desc=True).execute()
+        return response.data if response.data else []
+    except Exception as e:
+        st.error(f"Error al obtener ventas: {e}")
+        return []
+
+def obtener_detalles_venta(venta_id):
+    """Obtener detalles de una venta específica"""
+    try:
+        response = supabase.table("venta_detalles").select("*, inventario(nombre, precio)").eq("venta_id", venta_id).execute()
+        return response.data if response.data else []
+    except Exception as e:
+        st.error(f"Error al obtener detalles de venta: {e}")
+        return []
+
+def obtener_movimientos_inventario():
+    """Obtener movimientos de inventario"""
+    try:
+        response = supabase.table("movimientos_inventario").select("*, inventario(nombre)").order("fecha", desc=True).execute()
+        return response.data if response.data else []
+    except Exception as e:
+        st.error(f"Error al obtener movimientos: {e}")
         return []
 
 def obtener_productos():
@@ -75,6 +111,58 @@ def agregar_producto(nombre, cantidad, categoria, precio, provedor_id):
         st.error(f"Error al agregar producto: {e}")
         return False
 
+def agregar_proveedor(nombre, contacto, telefono, email, direccion):
+    """Agregar nuevo proveedor"""
+    try:
+        proveedor_data = {
+            "nombre": nombre.strip(),
+            "contacto": contacto.strip(),
+            "telefono": telefono.strip(),
+            "email": email.strip(),
+            "direccion": direccion.strip()
+        }
+        
+        response = supabase.table("proveedores").insert(proveedor_data).execute()
+        return bool(response.data)
+    except Exception as e:
+        st.error(f"Error al agregar proveedor: {e}")
+        return False
+
+def agregar_cliente(nombre, tipo_documento, documento, telefono, email, direccion):
+    """Agregar nuevo cliente"""
+    try:
+        cliente_data = {
+            "nombre": nombre.strip(),
+            "tipo_documento": tipo_documento,
+            "documento": documento.strip(),
+            "telefono": telefono.strip(),
+            "email": email.strip(),
+            "direccion": direccion.strip()
+        }
+        
+        response = supabase.table("clientes").insert(cliente_data).execute()
+        return bool(response.data)
+    except Exception as e:
+        st.error(f"Error al agregar cliente: {e}")
+        return False
+
+def agregar_movimiento(producto_id, tipo, cantidad, notas):
+    """Agregar movimiento de inventario"""
+    try:
+        movimiento_data = {
+            "producto_id": producto_id,
+            "tipo": tipo,
+            "cantidad": cantidad,
+            "notas": notas.strip(),
+            "fecha": datetime.now().isoformat()
+        }
+        
+        response = supabase.table("movimientos_inventario").insert(movimiento_data).execute()
+        return bool(response.data)
+    except Exception as e:
+        st.error(f"Error al agregar movimiento: {e}")
+        return False
+
 def actualizar_producto(producto_id, datos):
     """Actualizar producto"""
     try:
@@ -113,7 +201,7 @@ def insertar_datos_ejemplo():
         st.error(f"Error insertando datos: {e}")
     return False
 
-# ==================  AUTENTICACIÓN ==================
+# ================== 🔐 AUTENTICACIÓN ==================
 
 def check_password():
     if st.session_state.get("password_correct"):
@@ -139,7 +227,7 @@ def check_password():
                 st.error("❌ Usuario o contraseña incorrectos")
     
     with st.expander("📋 Usuarios de Prueba"):
-        st.write("**Administradores:** david/david123, briget/briget123, brian/brian123, ivan/ivan123")
+        st.write("**Administradores:** david/david123, briget/briget123")
         st.write("**Lectores:** lector/lector123, invitado/invitado123")
     
     return False
@@ -152,7 +240,7 @@ def tiene_permiso(permiso_requerido):
     user_role = st.session_state.get("user_role", "lector")
     return permiso_requerido in roles_permisos.get(user_role, ["ver"])
 
-# ==================  INTERFAZ ==================
+# ================== 🎨 INTERFAZ ==================
 
 def main():
     if not check_password():
@@ -177,7 +265,7 @@ def main():
             st.rerun()
         
         st.header("🔧 Navegación")
-        opciones = ["📊 Dashboard", "📦 Productos", "📈 Reportes"]
+        opciones = ["📊 Dashboard", "📦 Productos", "👥 Clientes", "🏢 Proveedores", "📋 Ventas", "🔄 Movimientos", "📈 Reportes"]
         if tiene_permiso("admin"):
             opciones.append("⚙️ Administración")
         opcion = st.radio("Menú", opciones)
@@ -190,6 +278,14 @@ def main():
         mostrar_dashboard()
     elif opcion == "📦 Productos":
         gestionar_productos()
+    elif opcion == "👥 Clientes":
+        gestionar_clientes()
+    elif opcion == "🏢 Proveedores":
+        gestionar_proveedores()
+    elif opcion == "📋 Ventas":
+        gestionar_ventas()
+    elif opcion == "🔄 Movimientos":
+        gestionar_movimientos()
     elif opcion == "📈 Reportes":
         mostrar_reportes()
     elif opcion == "⚙️ Administración":
@@ -206,7 +302,7 @@ def mostrar_dashboard():
     # Crear DataFrame seguro
     df_data = []
     for p in productos:
-        # Manejar proveedor 
+        # Manejar proveedor (puede venir de la relación)
         proveedor_nombre = "N/A"
         if 'proveedores' in p and p['proveedores']:
             proveedor_nombre = p['proveedores'].get('nombre', 'N/A')
@@ -338,7 +434,7 @@ def gestionar_productos():
         productos = obtener_productos()
         proveedores = obtener_proveedores()
         
-        #  BARRA DE BÚSQUEDA - AÑADIDO
+        # 🔍 BARRA DE BÚSQUEDA - AÑADIDO
         st.markdown("### 🔍 Buscar Productos")
         busqueda = st.text_input("Buscar por nombre, categoría o proveedor:", 
                                placeholder="Escribe para filtrar productos...",
@@ -419,8 +515,180 @@ def gestionar_productos():
                         if eliminar_producto(producto['id']):
                             st.rerun()
 
+def gestionar_clientes():
+    st.header("👥 Gestión de Clientes")
+    
+    tab1, tab2 = st.tabs(["📋 Lista de Clientes", "➕ Agregar Cliente"])
+    
+    with tab1:
+        clientes = obtener_clientes()
+        if clientes:
+            df = pd.DataFrame(clientes)
+            st.dataframe(df, use_container_width=True)
+        else:
+            st.info("No hay clientes registrados")
+    
+    with tab2:
+        st.subheader("Agregar Nuevo Cliente")
+        with st.form("agregar_cliente_form", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                nombre = st.text_input("Nombre/Razón Social*")
+                tipo_documento = st.selectbox("Tipo de Documento*", ["CC", "NIT", "CE", "PASAPORTE"])
+                documento = st.text_input("Número de Documento*")
+            with col2:
+                telefono = st.text_input("Teléfono")
+                email = st.text_input("Email")
+                direccion = st.text_area("Dirección")
+            
+            if st.form_submit_button("➕ Agregar Cliente"):
+                if nombre and tipo_documento and documento:
+                    if agregar_cliente(nombre, tipo_documento, documento, telefono, email, direccion):
+                        st.success("✅ Cliente agregado exitosamente!")
+                        st.rerun()
+                else:
+                    st.error("❌ Los campos marcados con * son obligatorios")
+
+def gestionar_proveedores():
+    st.header("🏢 Gestión de Proveedores")
+    
+    tab1, tab2 = st.tabs(["📋 Lista de Proveedores", "➕ Agregar Proveedor"])
+    
+    with tab1:
+        proveedores = obtener_proveedores()
+        if proveedores:
+            df = pd.DataFrame(proveedores)
+            st.dataframe(df, use_container_width=True)
+        else:
+            st.info("No hay proveedores registrados")
+    
+    with tab2:
+        st.subheader("Agregar Nuevo Proveedor")
+        with st.form("agregar_proveedor_form", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                nombre = st.text_input("Nombre del Proveedor*")
+                contacto = st.text_input("Persona de Contacto")
+                telefono = st.text_input("Teléfono")
+            with col2:
+                email = st.text_input("Email")
+                direccion = st.text_area("Dirección")
+            
+            if st.form_submit_button("➕ Agregar Proveedor"):
+                if nombre:
+                    if agregar_proveedor(nombre, contacto, telefono, email, direccion):
+                        st.success("✅ Proveedor agregado exitosamente!")
+                        st.rerun()
+                else:
+                    st.error("❌ El nombre del proveedor es obligatorio")
+
+def gestionar_ventas():
+    st.header("📋 Gestión de Ventas")
+    
+    ventas = obtener_ventas()
+    if not ventas:
+        st.info("No hay ventas registradas")
+        return
+    
+    for venta in ventas:
+        with st.expander(f"💰 Venta #{venta['id']} - {venta['fecha_venta'][:10]} - ${venta['total']:,.0f}".replace(",", ".")):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write(f"**Cliente:** {venta['clientes']['nombre'] if venta['clientes'] else 'N/A'}")
+                st.write(f"**Fecha:** {venta['fecha_venta'][:19]}")
+                st.write(f"**Estado:** {venta['estado']}")
+            with col2:
+                st.write(f"**Total:** ${venta['total']:,.0f}".replace(",", "."))
+                if venta['notas']:
+                    st.write(f"**Notas:** {venta['notas']}")
+            
+            # Mostrar detalles de la venta
+            detalles = obtener_detalles_venta(venta['id'])
+            if detalles:
+                st.subheader("📦 Productos Vendidos")
+                detalle_data = []
+                for detalle in detalles:
+                    detalle_data.append({
+                        'Producto': detalle['inventario']['nombre'] if detalle['inventario'] else 'N/A',
+                        'Cantidad': detalle['cantidad'],
+                        'Precio Unitario': f"${detalle['precio_unitario']:,.0f}".replace(",", "."),
+                        'Subtotal': f"${detalle['subtotal']:,.0f}".replace(",", ".")
+                    })
+                st.table(detalle_data)
+
+def gestionar_movimientos():
+    st.header("🔄 Movimientos de Inventario")
+    
+    movimientos = obtener_movimientos_inventario()
+    if not movimientos:
+        st.info("No hay movimientos registrados")
+        return
+    
+    # Filtrar por tipo de movimiento
+    tipos = list(set([m['tipo'] for m in movimientos if m.get('tipo')]))
+    tipo_seleccionado = st.selectbox("Filtrar por tipo:", ["Todos"] + tipos)
+    
+    movimientos_filtrados = movimientos
+    if tipo_seleccionado != "Todos":
+        movimientos_filtrados = [m for m in movimientos if m.get('tipo') == tipo_seleccionado]
+    
+    # Mostrar movimientos
+    movimiento_data = []
+    for mov in movimientos_filtrados:
+        movimiento_data.append({
+            'ID': mov['id'],
+            'Fecha': mov['fecha'][:19],
+            'Producto': mov['inventario']['nombre'] if mov['inventario'] else 'N/A',
+            'Tipo': mov['tipo'],
+            'Cantidad': mov['cantidad'],
+            'Notas': mov['notas'] or 'Sin notas'
+        })
+    
+    df = pd.DataFrame(movimiento_data)
+    st.dataframe(df, use_container_width=True)
+    
+    # Formulario para agregar movimiento
+    if tiene_permiso("admin"):
+        st.subheader("➕ Agregar Nuevo Movimiento")
+        productos = obtener_productos()
+        
+        with st.form("agregar_movimiento_form"):
+            col1, col2 = st.columns(2)
+            with col1:
+                producto_seleccionado = st.selectbox("Producto*", 
+                                                   options=[f"{p['id']} - {p['nombre']}" for p in productos],
+                                                   key="movimiento_producto")
+                tipo = st.selectbox("Tipo de Movimiento*", ["entrada", "salida", "ajuste"])
+            with col2:
+                cantidad = st.number_input("Cantidad*", min_value=1, value=1)
+                notas = st.text_area("Notas/Observaciones")
+            
+            if st.form_submit_button("➕ Agregar Movimiento"):
+                producto_id = int(producto_seleccionado.split(" - ")[0])
+                if agregar_movimiento(producto_id, tipo, cantidad, notas):
+                    st.success("✅ Movimiento agregado exitosamente!")
+                    st.rerun()
+
 def mostrar_reportes():
     st.header("📈 Reportes y Análisis")
+    
+    # Selección de tipo de reporte
+    tipo_reporte = st.selectbox("Seleccionar Tipo de Reporte", 
+                               ["Inventario", "Ventas", "Movimientos", "Clientes", "Proveedores"])
+    
+    if tipo_reporte == "Inventario":
+        mostrar_reporte_inventario()
+    elif tipo_reporte == "Ventas":
+        mostrar_reporte_ventas()
+    elif tipo_reporte == "Movimientos":
+        mostrar_reporte_movimientos()
+    elif tipo_reporte == "Clientes":
+        mostrar_reporte_clientes()
+    elif tipo_reporte == "Proveedores":
+        mostrar_reporte_proveedores()
+
+def mostrar_reporte_inventario():
+    st.subheader("📊 Reporte de Inventario")
     
     productos = obtener_productos()
     if not productos:
@@ -434,15 +702,14 @@ def mostrar_reportes():
             proveedor_nombre = p['proveedores'].get('nombre', 'N/A')
         
         df_data.append({
-            'id': p.get('id', 0),
             'nombre': p.get('nombre', ''),
             'categoria': p.get('categoria', ''),
             'cantidad': p.get('cantidad', 0),
             'precio': p.get('precio', 0),
-            'proveedor': proveedor_nombre
+            'proveedor': proveedor_nombre,
+            'valor_total': p.get('cantidad', 0) * p.get('precio', 0)
         })
     df = pd.DataFrame(df_data)
-    df['valor_total'] = df['cantidad'] * df['precio']
     
     # Resumen
     col1, col2, col3, col4 = st.columns(4)
@@ -452,23 +719,200 @@ def mostrar_reportes():
     col4.metric("Categorías", df['categoria'].nunique())
     
     # Resumen por categoría
-    if 'categoria' in df.columns:
-        st.subheader("Resumen por Categoría")
-        resumen = df.groupby('categoria').agg({
-            'id': 'count',
-            'cantidad': 'sum',
-            'valor_total': 'sum'
-        }).rename(columns={'id': 'Cantidad Productos'})
-        st.dataframe(resumen, use_container_width=True)
-        
-        # Gráficos
-        col1, col2 = st.columns(2)
-        with col1:
-            st.subheader("Productos por Categoría")
-            st.bar_chart(resumen['Cantidad Productos'])
-        with col2:
-            st.subheader("Valor por Categoría")
-            st.bar_chart(resumen['valor_total'])
+    st.subheader("Resumen por Categoría")
+    resumen_categorias = df.groupby('categoria').agg({
+        'nombre': 'count',
+        'cantidad': 'sum',
+        'valor_total': 'sum'
+    }).rename(columns={'nombre': 'Cantidad Productos'})
+    st.dataframe(resumen_categorias, use_container_width=True)
+    
+    # Gráficos
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Productos por Categoría")
+        conteo_categorias = df['categoria'].value_counts()
+        st.bar_chart(conteo_categorias)
+    with col2:
+        st.subheader("Valor por Categoría")
+        valor_por_categoria = df.groupby('categoria')['valor_total'].sum()
+        st.bar_chart(valor_por_categoria)
+    
+    # Exportar reporte
+    csv = df.to_csv(index=False)
+    st.download_button("📥 Descargar Reporte CSV", csv, "reporte_inventario.csv", "text/csv")
+
+def mostrar_reporte_ventas():
+    st.subheader("💰 Reporte de Ventas")
+    
+    ventas = obtener_ventas()
+    if not ventas:
+        st.warning("No hay ventas para mostrar")
+        return
+    
+    # Filtrar por fecha
+    col1, col2 = st.columns(2)
+    with col1:
+        fecha_inicio = st.date_input("Fecha de inicio", value=datetime.now() - timedelta(days=30))
+    with col2:
+        fecha_fin = st.date_input("Fecha de fin", value=datetime.now())
+    
+    ventas_filtradas = [
+        v for v in ventas 
+        if fecha_inicio <= datetime.fromisoformat(v['fecha_venta']).date() <= fecha_fin
+    ]
+    
+    if not ventas_filtradas:
+        st.info("No hay ventas en el período seleccionado")
+        return
+    
+    # Métricas
+    total_ventas = sum(v['total'] for v in ventas_filtradas)
+    cantidad_ventas = len(ventas_filtradas)
+    venta_promedio = total_ventas / cantidad_ventas if cantidad_ventas > 0 else 0
+    
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total Ventas", f"${total_ventas:,.0f}".replace(",", "."))
+    col2.metric("Cantidad Ventas", cantidad_ventas)
+    col3.metric("Venta Promedio", f"${venta_promedio:,.0f}".replace(",", "."))
+    
+    # Tabla de ventas
+    venta_data = []
+    for venta in ventas_filtradas:
+        venta_data.append({
+            'ID': venta['id'],
+            'Fecha': venta['fecha_venta'][:10],
+            'Cliente': venta['clientes']['nombre'] if venta['clientes'] else 'N/A',
+            'Total': venta['total'],
+            'Estado': venta['estado']
+        })
+    
+    df_ventas = pd.DataFrame(venta_data)
+    st.dataframe(df_ventas, use_container_width=True)
+    
+    # Exportar reporte
+    csv = df_ventas.to_csv(index=False)
+    st.download_button("📥 Descargar Reporte CSV", csv, "reporte_ventas.csv", "text/csv")
+
+def mostrar_reporte_movimientos():
+    st.subheader("🔄 Reporte de Movimientos")
+    
+    movimientos = obtener_movimientos_inventario()
+    if not movimientos:
+        st.warning("No hay movimientos para mostrar")
+        return
+    
+    # Resumen por tipo
+    tipos_movimiento = {}
+    for mov in movimientos:
+        tipo = mov.get('tipo', 'desconocido')
+        if tipo not in tipos_movimiento:
+            tipos_movimiento[tipo] = 0
+        tipos_movimiento[tipo] += mov.get('cantidad', 0)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Total Movimientos", len(movimientos))
+    with col2:
+        st.metric("Tipos Diferentes", len(tipos_movimiento))
+    
+    # Gráfico de movimientos por tipo
+    st.subheader("Movimientos por Tipo")
+    df_tipos = pd.DataFrame(list(tipos_movimiento.items()), columns=['Tipo', 'Cantidad'])
+    st.bar_chart(df_tipos.set_index('Tipo'))
+    
+    # Tabla detallada
+    movimiento_data = []
+    for mov in movimientos:
+        movimiento_data.append({
+            'Fecha': mov['fecha'][:19],
+            'Producto': mov['inventario']['nombre'] if mov['inventario'] else 'N/A',
+            'Tipo': mov['tipo'],
+            'Cantidad': mov['cantidad'],
+            'Notas': mov['notas'] or 'Sin notas'
+        })
+    
+    df_movimientos = pd.DataFrame(movimiento_data)
+    st.dataframe(df_movimientos, use_container_width=True)
+    
+    # Exportar reporte
+    csv = df_movimientos.to_csv(index=False)
+    st.download_button("📥 Descargar Reporte CSV", csv, "reporte_movimientos.csv", "text/csv")
+
+def mostrar_reporte_clientes():
+    st.subheader("👥 Reporte de Clientes")
+    
+    clientes = obtener_clientes()
+    if not clientes:
+        st.warning("No hay clientes para mostrar")
+        return
+    
+    # Métricas
+    total_clientes = len(clientes)
+    clientes_activos = sum(1 for c in clientes if c.get('activo', True))
+    
+    col1, col2 = st.columns(2)
+    col1.metric("Total Clientes", total_clientes)
+    col2.metric("Clientes Activos", clientes_activos)
+    
+    # Distribución por tipo de documento
+    tipos_documento = {}
+    for cliente in clientes:
+        tipo = cliente.get('tipo_documento', 'No especificado')
+        if tipo not in tipos_documento:
+            tipos_documento[tipo] = 0
+        tipos_documento[tipo] += 1
+    
+    st.subheader("Distribución por Tipo de Documento")
+    df_tipos = pd.DataFrame(list(tipos_documento.items()), columns=['Tipo Documento', 'Cantidad'])
+    st.bar_chart(df_tipos.set_index('Tipo Documento'))
+    
+    # Tabla de clientes
+    df_clientes = pd.DataFrame(clientes)
+    st.dataframe(df_clientes, use_container_width=True)
+    
+    # Exportar reporte
+    csv = df_clientes.to_csv(index=False)
+    st.download_button("📥 Descargar Reporte CSV", csv, "reporte_clientes.csv", "text/csv")
+
+def mostrar_reporte_proveedores():
+    st.subheader("🏢 Reporte de Proveedores")
+    
+    proveedores = obtener_proveedores()
+    if not proveedores:
+        st.warning("No hay proveedores para mostrar")
+        return
+    
+    # Métricas
+    total_proveedores = len(proveedores)
+    proveedores_activos = sum(1 for p in proveedores if p.get('activo', True))
+    
+    col1, col2 = st.columns(2)
+    col1.metric("Total Proveedores", total_proveedores)
+    col2.metric("Proveedores Activos", proveedores_activos)
+    
+    # Productos por proveedor
+    productos = obtener_productos()
+    productos_por_proveedor = {}
+    for producto in productos:
+        proveedor_id = producto.get('provedor_id')
+        if proveedor_id:
+            proveedor_nombre = next((p['nombre'] for p in proveedores if p['id'] == proveedor_id), 'Desconocido')
+            if proveedor_nombre not in productos_por_proveedor:
+                productos_por_proveedor[proveedor_nombre] = 0
+            productos_por_proveedor[proveedor_nombre] += 1
+    
+    st.subheader("Productos por Proveedor")
+    df_productos_proveedor = pd.DataFrame(list(productos_por_proveedor.items()), columns=['Proveedor', 'Cantidad Productos'])
+    st.bar_chart(df_productos_proveedor.set_index('Proveedor'))
+    
+    # Tabla de proveedores
+    df_proveedores = pd.DataFrame(proveedores)
+    st.dataframe(df_proveedores, use_container_width=True)
+    
+    # Exportar reporte
+    csv = df_proveedores.to_csv(index=False)
+    st.download_button("📥 Descargar Reporte CSV", csv, "reporte_proveedores.csv", "text/csv")
 
 def mostrar_administracion():
     st.header("⚙️ Panel de Administración")
@@ -497,7 +941,7 @@ def mostrar_administracion():
             st.rerun()
     
     with col2:
-        if st.button("📊 Generar Reporte"):
+        if st.button("📊 Generar Reporte Completo"):
             productos = obtener_productos()
             if productos:
                 df_data = []
@@ -526,4 +970,3 @@ def mostrar_administracion():
 if __name__ == "__main__":
     supabase = get_supabase_client()
     main()
-
