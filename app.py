@@ -37,21 +37,12 @@ def obtener_clientes():
         return []
 
 def obtener_ventas():
-    """Obtener ventas con información de clientes"""
+    """Obtener ventas con información de clientes y productos"""
     try:
-        response = supabase.table("ventas").select("*, clientes(*)").order("fecha_venta", desc=True).execute()
+        response = supabase.table("ventas").select("*, clientes(*), inventario(nombre, categoria)").order("fecha_venta", desc=True).execute()
         return response.data if response.data else []
     except Exception as e:
         st.error(f"Error al obtener ventas: {e}")
-        return []
-
-def obtener_detalles_venta(venta_id):
-    """Obtener detalles de una venta específica"""
-    try:
-        response = supabase.table("venta_detalles").select("*, inventario(nombre, precio)").eq("venta_id", venta_id).execute()
-        return response.data if response.data else []
-    except Exception as e:
-        st.error(f"Error al obtener detalles de venta: {e}")
         return []
 
 def obtener_movimientos_inventario():
@@ -146,6 +137,42 @@ def agregar_cliente(nombre, tipo_documento, documento, telefono, email, direccio
         st.error(f"Error al agregar cliente: {e}")
         return False
 
+def agregar_venta(cliente_id, producto_id, cantidad, precio_unitario, notas=""):
+    """Agregar nueva venta"""
+    try:
+        total = cantidad * precio_unitario
+        
+        venta_data = {
+            "cliente_id": cliente_id,
+            "producto_id": producto_id,
+            "cantidad": cantidad,
+            "precio_unitario": precio_unitario,
+            "total": total,
+            "notas": notas.strip()
+        }
+        
+        response = supabase.table("ventas").insert(venta_data).execute()
+        
+        # Actualizar stock del producto
+        producto_actual = supabase.table("inventario").select("cantidad").eq("id", producto_id).execute()
+        if producto_actual.data:
+            nueva_cantidad = producto_actual.data[0]['cantidad'] - cantidad
+            supabase.table("inventario").update({"cantidad": nueva_cantidad}).eq("id", producto_id).execute()
+            
+            # Registrar movimiento de inventario
+            movimiento_data = {
+                "producto_id": producto_id,
+                "tipo": "salida",
+                "cantidad": cantidad,
+                "notas": f"Venta registrada - {notas.strip()}" if notas else "Venta registrada"
+            }
+            supabase.table("movimientos_inventario").insert(movimiento_data).execute()
+        
+        return bool(response.data)
+    except Exception as e:
+        st.error(f"Error al agregar venta: {e}")
+        return False
+
 def agregar_movimiento(producto_id, tipo, cantidad, notas):
     """Agregar movimiento de inventario"""
     try:
@@ -158,6 +185,20 @@ def agregar_movimiento(producto_id, tipo, cantidad, notas):
         }
         
         response = supabase.table("movimientos_inventario").insert(movimiento_data).execute()
+        
+        # Actualizar stock del producto
+        producto_actual = supabase.table("inventario").select("cantidad").eq("id", producto_id).execute()
+        if producto_actual.data:
+            stock_actual = producto_actual.data[0]['cantidad']
+            if tipo == "entrada":
+                nueva_cantidad = stock_actual + cantidad
+            elif tipo == "salida":
+                nueva_cantidad = stock_actual - cantidad
+            else:  # ajuste
+                nueva_cantidad = cantidad
+                
+            supabase.table("inventario").update({"cantidad": nueva_cantidad}).eq("id", producto_id).execute()
+        
         return bool(response.data)
     except Exception as e:
         st.error(f"Error al agregar movimiento: {e}")
@@ -265,7 +306,7 @@ def main():
             st.rerun()
         
         st.header("🔧 Navegación")
-        opciones = ["📊 Dashboard", "📦 Productos", "👥 Clientes", "🏢 Proveedores", "📋 Ventas", "🔄 Movimientos", "📈 Reportes"]
+        opciones = ["📊 Dashboard", "📦 Productos", "👥 Clientes", "🏢 Proveedores", "💰 Ventas", "🔄 Movimientos", "📈 Reportes"]
         if tiene_permiso("admin"):
             opciones.append("⚙️ Administración")
         opcion = st.radio("Menú", opciones)
@@ -282,7 +323,7 @@ def main():
         gestionar_clientes()
     elif opcion == "🏢 Proveedores":
         gestionar_proveedores()
-    elif opcion == "📋 Ventas":
+    elif opcion == "💰 Ventas":
         gestionar_ventas()
     elif opcion == "🔄 Movimientos":
         gestionar_movimientos()
@@ -295,6 +336,8 @@ def mostrar_dashboard():
     st.header("📊 Dashboard de Inventario")
     
     productos = obtener_productos()
+    ventas = obtener_ventas()
+    
     if not productos:
         st.warning("No hay productos en el inventario")
         return
@@ -323,10 +366,16 @@ def mostrar_dashboard():
     
     # Mostrar métricas
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Valor Total", f"${total_valor:,.0f}".replace(",", "."))
+    col1.metric("Valor Total Inventario", f"${total_valor:,.0f}".replace(",", "."))
     col2.metric("Total Productos", len(df))
     col3.metric("Stock Total", f"{df['cantidad'].sum():,}".replace(",", "."))
-    col4.metric("Stock Bajo", len(df[df['cantidad'] <= 5]))
+    
+    # Ventas del mes
+    ventas_mes = 0
+    if ventas:
+        mes_actual = datetime.now().month
+        ventas_mes = sum(v['total'] for v in ventas if datetime.fromisoformat(v['fecha_venta']).month == mes_actual)
+    col4.metric("Ventas del Mes", f"${ventas_mes:,.0f}".replace(",", "."))
     
     # Productos con stock bajo
     bajos = df[df['cantidad'] <= 5]
@@ -583,38 +632,89 @@ def gestionar_proveedores():
                     st.error("❌ El nombre del proveedor es obligatorio")
 
 def gestionar_ventas():
-    st.header("📋 Gestión de Ventas")
+    st.header("💰 Gestión de Ventas")
     
-    ventas = obtener_ventas()
-    if not ventas:
-        st.info("No hay ventas registradas")
-        return
+    tab1, tab2 = st.tabs(["📋 Historial de Ventas", "➕ Nueva Venta"])
     
-    for venta in ventas:
-        with st.expander(f"💰 Venta #{venta['id']} - {venta['fecha_venta'][:10]} - ${venta['total']:,.0f}".replace(",", ".")):
+    with tab1:
+        ventas = obtener_ventas()
+        if ventas:
+            venta_data = []
+            for venta in ventas:
+                venta_data.append({
+                    'ID': venta['id'],
+                    'Fecha': venta['fecha_venta'][:19],
+                    'Cliente': venta['clientes']['nombre'] if venta['clientes'] else 'N/A',
+                    'Producto': venta['inventario']['nombre'] if venta['inventario'] else 'N/A',
+                    'Cantidad': venta['cantidad'],
+                    'Precio Unitario': f"${venta['precio_unitario']:,.0f}".replace(",", "."),
+                    'Total': f"${venta['total']:,.0f}".replace(",", "."),
+                    'Estado': venta['estado']
+                })
+            
+            df = pd.DataFrame(venta_data)
+            st.dataframe(df, use_container_width=True)
+            
+            # Métricas rápidas
+            total_ventas = sum(v['total'] for v in ventas)
+            st.metric("💰 Total en Ventas", f"${total_ventas:,.0f}".replace(",", "."))
+        else:
+            st.info("No hay ventas registradas")
+    
+    with tab2:
+        st.subheader("Registrar Nueva Venta")
+        clientes = obtener_clientes()
+        productos = obtener_productos()
+        
+        with st.form("nueva_venta_form", clear_on_submit=True):
             col1, col2 = st.columns(2)
             with col1:
-                st.write(f"**Cliente:** {venta['clientes']['nombre'] if venta['clientes'] else 'N/A'}")
-                st.write(f"**Fecha:** {venta['fecha_venta'][:19]}")
-                st.write(f"**Estado:** {venta['estado']}")
+                if clientes:
+                    cliente_seleccionado = st.selectbox("Cliente*", 
+                                                      options=[f"{c['id']} - {c['nombre']}" for c in clientes])
+                    cliente_id = int(cliente_seleccionado.split(" - ")[0]) if cliente_seleccionado else None
+                else:
+                    st.warning("No hay clientes registrados")
+                    cliente_id = None
+                
+                if productos:
+                    # Filtrar productos con stock disponible
+                    productos_con_stock = [p for p in productos if p['cantidad'] > 0]
+                    if productos_con_stock:
+                        producto_seleccionado = st.selectbox("Producto*", 
+                                                           options=[f"{p['id']} - {p['nombre']} (Stock: {p['cantidad']})" for p in productos_con_stock])
+                        producto_id = int(producto_seleccionado.split(" - ")[0]) if producto_seleccionado else None
+                        
+                        # Mostrar información del producto seleccionado
+                        if producto_seleccionado:
+                            producto_info = next((p for p in productos if p['id'] == producto_id), None)
+                            if producto_info:
+                                st.info(f"💡 **Precio actual:** ${producto_info['precio']:,.0f}".replace(",", "."))
+                    else:
+                        st.error("❌ No hay productos con stock disponible")
+                        producto_id = None
+                else:
+                    st.warning("No hay productos disponibles")
+                    producto_id = None
+                
             with col2:
-                st.write(f"**Total:** ${venta['total']:,.0f}".replace(",", "."))
-                if venta['notas']:
-                    st.write(f"**Notas:** {venta['notas']}")
+                cantidad = st.number_input("Cantidad*", min_value=1, value=1)
+                precio_unitario = st.number_input("Precio Unitario (COP)*", min_value=0, value=0, step=1000)
+                notas = st.text_area("Notas/Observaciones")
             
-            # Mostrar detalles de la venta
-            detalles = obtener_detalles_venta(venta['id'])
-            if detalles:
-                st.subheader("📦 Productos Vendidos")
-                detalle_data = []
-                for detalle in detalles:
-                    detalle_data.append({
-                        'Producto': detalle['inventario']['nombre'] if detalle['inventario'] else 'N/A',
-                        'Cantidad': detalle['cantidad'],
-                        'Precio Unitario': f"${detalle['precio_unitario']:,.0f}".replace(",", "."),
-                        'Subtotal': f"${detalle['subtotal']:,.0f}".replace(",", ".")
-                    })
-                st.table(detalle_data)
+            if st.form_submit_button("💰 Registrar Venta"):
+                if cliente_id and producto_id and cantidad > 0 and precio_unitario > 0:
+                    # Verificar stock disponible
+                    producto_info = next((p for p in productos if p['id'] == producto_id), None)
+                    if producto_info and producto_info['cantidad'] >= cantidad:
+                        if agregar_venta(cliente_id, producto_id, cantidad, precio_unitario, notas):
+                            st.success("✅ Venta registrada exitosamente!")
+                            st.rerun()
+                    else:
+                        stock_disponible = producto_info['cantidad'] if producto_info else 0
+                        st.error(f"❌ Stock insuficiente. Stock disponible: {stock_disponible}")
+                else:
+                    st.error("❌ Complete todos los campos requeridos")
 
 def gestionar_movimientos():
     st.header("🔄 Movimientos de Inventario")
@@ -655,19 +755,25 @@ def gestionar_movimientos():
         with st.form("agregar_movimiento_form"):
             col1, col2 = st.columns(2)
             with col1:
-                producto_seleccionado = st.selectbox("Producto*", 
-                                                   options=[f"{p['id']} - {p['nombre']}" for p in productos],
-                                                   key="movimiento_producto")
+                if productos:
+                    producto_seleccionado = st.selectbox("Producto*", 
+                                                       options=[f"{p['id']} - {p['nombre']}" for p in productos],
+                                                       key="movimiento_producto")
+                    producto_id = int(producto_seleccionado.split(" - ")[0]) if producto_seleccionado else None
+                else:
+                    st.warning("No hay productos disponibles")
+                    producto_id = None
+                    
                 tipo = st.selectbox("Tipo de Movimiento*", ["entrada", "salida", "ajuste"])
             with col2:
                 cantidad = st.number_input("Cantidad*", min_value=1, value=1)
                 notas = st.text_area("Notas/Observaciones")
             
             if st.form_submit_button("➕ Agregar Movimiento"):
-                producto_id = int(producto_seleccionado.split(" - ")[0])
-                if agregar_movimiento(producto_id, tipo, cantidad, notas):
-                    st.success("✅ Movimiento agregado exitosamente!")
-                    st.rerun()
+                if producto_id:
+                    if agregar_movimiento(producto_id, tipo, cantidad, notas):
+                        st.success("✅ Movimiento agregado exitosamente!")
+                        st.rerun()
 
 def mostrar_reportes():
     st.header("📈 Reportes y Análisis")
@@ -783,12 +889,29 @@ def mostrar_reporte_ventas():
             'ID': venta['id'],
             'Fecha': venta['fecha_venta'][:10],
             'Cliente': venta['clientes']['nombre'] if venta['clientes'] else 'N/A',
+            'Producto': venta['inventario']['nombre'] if venta['inventario'] else 'N/A',
+            'Cantidad': venta['cantidad'],
+            'Precio Unitario': venta['precio_unitario'],
             'Total': venta['total'],
             'Estado': venta['estado']
         })
     
     df_ventas = pd.DataFrame(venta_data)
     st.dataframe(df_ventas, use_container_width=True)
+    
+    # Gráfico de ventas por día
+    st.subheader("Ventas por Día")
+    if ventas_filtradas:
+        ventas_por_dia = {}
+        for venta in ventas_filtradas:
+            fecha = venta['fecha_venta'][:10]
+            if fecha not in ventas_por_dia:
+                ventas_por_dia[fecha] = 0
+            ventas_por_dia[fecha] += venta['total']
+        
+        df_ventas_dia = pd.DataFrame(list(ventas_por_dia.items()), columns=['Fecha', 'Total'])
+        df_ventas_dia = df_ventas_dia.sort_values('Fecha')
+        st.line_chart(df_ventas_dia.set_index('Fecha'))
     
     # Exportar reporte
     csv = df_ventas.to_csv(index=False)
