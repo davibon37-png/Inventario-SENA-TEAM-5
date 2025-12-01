@@ -525,47 +525,60 @@ def gestionar_productos():
                         st.write(f"**Precio:** ${producto.get('precio', 0):,}".replace(",", "."))
                         st.write(f"**Proveedor:** {proveedor_actual_nombre}")
                     
-                    with st.form(f"editar_{producto['id']}"):
-                        nuevo_nombre = st.text_input("Nombre", value=producto.get('nombre', ''), key=f"n_{producto['id']}")
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            nueva_cantidad = st.number_input("Cantidad", value=producto.get('cantidad', 0), key=f"c_{producto['id']}")
-                            nuevo_precio = st.number_input("Precio", value=producto.get('precio', 0), key=f"p_{producto['id']}")
-                        with col2:
-                            # Select de proveedores para edición
-                            if proveedores:
-                                opciones_proveedores = {f"{p['nombre']}": p['id'] for p in proveedores}
-                                # Encontrar el proveedor actual
-                                provedor_actual_id = producto.get('provedor_id')
-                                nombre_proveedor_actual = next((p['nombre'] for p in proveedores if p['id'] == provedor_actual_id), list(opciones_proveedores.keys())[0])
-                                
-                                nuevo_proveedor_nombre = st.selectbox(
-                                    "Proveedor", 
-                                    options=list(opciones_proveedores.keys()),
-                                    index=list(opciones_proveedores.keys()).index(nombre_proveedor_actual) if nombre_proveedor_actual in opciones_proveedores else 0,
-                                    key=f"prov_{producto['id']}"
-                                )
-                                nuevo_provedor_id = opciones_proveedores[nuevo_proveedor_nombre]
-                            else:
-                                st.warning("No hay proveedores")
-                                nuevo_provedor_id = producto.get('provedor_id')
+                    if tiene_permiso("editar"):
+                        with st.form(f"editar_{producto['id']}"):
+                            nuevo_nombre = st.text_input("Nombre", value=producto.get('nombre', ''), key=f"n_{producto['id']}")
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                nueva_cantidad = st.number_input("Cantidad", value=producto.get('cantidad', 0), key=f"c_{producto['id']}")
+                                nuevo_precio = st.number_input("Precio", value=producto.get('precio', 0), key=f"p_{producto['id']}")
+                            with col2:
+                                # Select de proveedores para edición
+                                if proveedores:
+                                    opciones_proveedores = {f"{p['nombre']}": p['id'] for p in proveedores}
+                                    # Encontrar el proveedor actual
+                                    provedor_actual_id = producto.get('provedor_id')
+                                    nombre_proveedor_actual = next((p['nombre'] for p in proveedores if p['id'] == provedor_actual_id), list(opciones_proveedores.keys())[0])
+                                    
+                                    nuevo_proveedor_nombre = st.selectbox(
+                                        "Proveedor", 
+                                        options=list(opciones_proveedores.keys()),
+                                        index=list(opciones_proveedores.keys()).index(nombre_proveedor_actual) if nombre_proveedor_actual in opciones_proveedores else 0,
+                                        key=f"prov_{producto['id']}"
+                                    )
+                                    nuevo_provedor_id = opciones_proveedores[nuevo_proveedor_nombre]
+                                else:
+                                    st.warning("No hay proveedores")
+                                    nuevo_provedor_id = producto.get('provedor_id')
+                            
+                            if st.form_submit_button("💾 Guardar"):
+                                datos = {
+                                    "nombre": nuevo_nombre,
+                                    "cantidad": nueva_cantidad,
+                                    "precio": nuevo_precio,
+                                    "provedor_id": nuevo_provedor_id
+                                }
+                                if actualizar_producto(producto['id'], datos):
+                                    st.rerun()
                         
-                        if st.form_submit_button("💾 Guardar"):
-                            datos = {
-                                "nombre": nuevo_nombre,
-                                "cantidad": nueva_cantidad,
-                                "precio": nuevo_precio,
-                                "provedor_id": nuevo_provedor_id
-                            }
-                            if actualizar_producto(producto['id'], datos):
+                        if st.button(f"🗑️ Eliminar", key=f"del_{producto['id']}"):
+                            if eliminar_producto(producto['id']):
                                 st.rerun()
-                    
-                    if st.button(f"🗑️ Eliminar", key=f"del_{producto['id']}"):
-                        if eliminar_producto(producto['id']):
-                            st.rerun()
+                    else:
+                        st.info("👁️ **Solo lectura** - No tienes permisos para editar o eliminar productos")
 
 def gestionar_clientes():
     st.header("👥 Gestión de Clientes")
+    
+    if st.session_state.get("user_role") == "lector":
+        st.info("👁️ **Modo de solo lectura**")
+        clientes = obtener_clientes()
+        if clientes:
+            df = pd.DataFrame(clientes)
+            st.dataframe(df, use_container_width=True)
+        else:
+            st.info("No hay clientes registrados")
+        return
     
     tab1, tab2 = st.tabs(["📋 Lista de Clientes", "➕ Agregar Cliente"])
     
@@ -600,6 +613,16 @@ def gestionar_clientes():
 
 def gestionar_proveedores():
     st.header("🏢 Gestión de Proveedores")
+    
+    if st.session_state.get("user_role") == "lector":
+        st.info("👁️ **Modo de solo lectura**")
+        proveedores = obtener_proveedores()
+        if proveedores:
+            df = pd.DataFrame(proveedores)
+            st.dataframe(df, use_container_width=True)
+        else:
+            st.info("No hay proveedores registrados")
+        return
     
     tab1, tab2 = st.tabs(["📋 Lista de Proveedores", "➕ Agregar Proveedor"])
     
@@ -662,6 +685,10 @@ def gestionar_ventas():
             st.info("No hay ventas registradas")
     
     with tab2:
+        if st.session_state.get("user_role") == "lector":
+            st.info("👁️ **Modo de solo lectura** - No tienes permisos para registrar ventas")
+            return
+            
         st.subheader("Registrar Nueva Venta")
         clientes = obtener_clientes()
         productos = obtener_productos()
@@ -722,33 +749,32 @@ def gestionar_movimientos():
     movimientos = obtener_movimientos_inventario()
     if not movimientos:
         st.info("No hay movimientos registrados")
-        return
-    
-    # Filtrar por tipo de movimiento
-    tipos = list(set([m['tipo'] for m in movimientos if m.get('tipo')]))
-    tipo_seleccionado = st.selectbox("Filtrar por tipo:", ["Todos"] + tipos)
-    
-    movimientos_filtrados = movimientos
-    if tipo_seleccionado != "Todos":
-        movimientos_filtrados = [m for m in movimientos if m.get('tipo') == tipo_seleccionado]
-    
-    # Mostrar movimientos
-    movimiento_data = []
-    for mov in movimientos_filtrados:
-        movimiento_data.append({
-            'ID': mov['id'],
-            'Fecha': mov['fecha'][:19],
-            'Producto': mov['inventario']['nombre'] if mov['inventario'] else 'N/A',
-            'Tipo': mov['tipo'],
-            'Cantidad': mov['cantidad'],
-            'Notas': mov['notas'] or 'Sin notas'
-        })
-    
-    df = pd.DataFrame(movimiento_data)
-    st.dataframe(df, use_container_width=True)
+    else:
+        # Filtrar por tipo de movimiento
+        tipos = list(set([m['tipo'] for m in movimientos if m.get('tipo')]))
+        tipo_seleccionado = st.selectbox("Filtrar por tipo:", ["Todos"] + tipos)
+        
+        movimientos_filtrados = movimientos
+        if tipo_seleccionado != "Todos":
+            movimientos_filtrados = [m for m in movimientos if m.get('tipo') == tipo_seleccionado]
+        
+        # Mostrar movimientos
+        movimiento_data = []
+        for mov in movimientos_filtrados:
+            movimiento_data.append({
+                'ID': mov['id'],
+                'Fecha': mov['fecha'][:19],
+                'Producto': mov['inventario']['nombre'] if mov['inventario'] else 'N/A',
+                'Tipo': mov['tipo'],
+                'Cantidad': mov['cantidad'],
+                'Notas': mov['notas'] or 'Sin notas'
+            })
+        
+        df = pd.DataFrame(movimiento_data)
+        st.dataframe(df, use_container_width=True)
     
     # Formulario para agregar movimiento
-    if tiene_permiso("admin"):
+    if tiene_permiso("agregar"):
         st.subheader("➕ Agregar Nuevo Movimiento")
         productos = obtener_productos()
         
@@ -774,6 +800,8 @@ def gestionar_movimientos():
                     if agregar_movimiento(producto_id, tipo, cantidad, notas):
                         st.success("✅ Movimiento agregado exitosamente!")
                         st.rerun()
+    else:
+        st.info("👁️ **Modo de solo lectura** - No tienes permisos para agregar movimientos")
 
 def mostrar_reportes():
     st.header("📈 Reportes y Análisis")
