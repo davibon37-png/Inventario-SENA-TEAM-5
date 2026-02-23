@@ -18,6 +18,9 @@ USUARIOS = {
 
 # ================== 🔧 FUNCIONES BASE DE DATOS ==================
 
+from datetime import datetime
+import streamlit as st
+
 def obtener_proveedores():
     """Obtener lista de proveedores desde la base de datos"""
     try:
@@ -29,7 +32,6 @@ def obtener_proveedores():
     except Exception as e:
         st.error(f"Error al obtener proveedores: {e}")
         return []
-
 
 def obtener_clientes():
     """Obtener lista de clientes desde la base de datos"""
@@ -43,11 +45,13 @@ def obtener_clientes():
         st.error(f"Error al obtener clientes: {e}")
         return []
 
-
 def obtener_ventas():
-    """Obtener ventas con información de clientes y productos"""
+    """
+    Obtener ventas con información del cliente.
+    Nota: la tabla 'ventas' de tu esquema no contiene producto_id, por eso no se hace join a inventario aquí.
+    """
     try:
-        response = supabase.table("ventas").select("*, clientes(*), inventario(nombre, categoria)").order("fecha_venta", desc=True).execute()
+        response = supabase.table("ventas").select("*, clientes(*)").order("fecha_venta", desc=True).execute()
         if getattr(response, "error", None):
             st.error(f"Error al obtener ventas: {response.error}")
             return []
@@ -56,9 +60,8 @@ def obtener_ventas():
         st.error(f"Error al obtener ventas: {e}")
         return []
 
-
 def obtener_movimientos_inventario():
-    """Obtener movimientos de inventario"""
+    """Obtener movimientos de inventario (con info básica del producto)"""
     try:
         response = supabase.table("movimientos_inventario").select("*, inventario(nombre)").order("fecha", desc=True).execute()
         if getattr(response, "error", None):
@@ -69,11 +72,9 @@ def obtener_movimientos_inventario():
         st.error(f"Error al obtener movimientos: {e}")
         return []
 
-
 def obtener_productos():
     """Obtener productos con información de proveedores (left join para incluir productos sin proveedor)"""
     try:
-        # left join de proveedores (incluye productos sin proveedor)
         response = supabase.table("inventario").select("*, proveedores(nombre)").execute()
         if getattr(response, "error", None):
             st.error(f"Error al obtener productos (join): {response.error}")
@@ -90,7 +91,7 @@ def obtener_productos():
         return response.data if response.data else []
     except Exception as e:
         st.error(f"Error al obtener productos: {e}")
-        # Fallback: obtener sin join
+        # Fallback: intentar sin join
         try:
             response = supabase.table("inventario").select("*").execute()
             if getattr(response, "error", None):
@@ -100,7 +101,6 @@ def obtener_productos():
         except Exception as e2:
             st.error(f"Fallback excepción al obtener productos: {e2}")
             return []
-
 
 def obtener_categorias():
     """Obtener categorías únicas de productos"""
@@ -116,12 +116,10 @@ def obtener_categorias():
     except Exception:
         return ["Tecnología", "Mobiliario", "Accesorios", "Insumos"]
 
-
 def agregar_producto(nombre, cantidad, categoria, precio, proveedor_id):
-    """Agregar nuevo producto usando proveedor_id (nota la corrección en el nombre)"""
+    """Agregar nuevo producto usando proveedor_id (sin setear id manualmente)."""
     try:
         producto_data = {
-            # No setear 'id' manualmente; que lo maneje Postgres
             "nombre": nombre.strip(),
             "categoria": categoria,
             "precio": precio,
@@ -129,7 +127,7 @@ def agregar_producto(nombre, cantidad, categoria, precio, proveedor_id):
             "proveedor_id": proveedor_id,
             "fecha_actualizacion": datetime.now().isoformat()
         }
-
+        
         response = supabase.table("inventario").insert(producto_data).execute()
         if getattr(response, "error", None):
             st.error(f"Error al insertar producto: {response.error}")
@@ -138,7 +136,6 @@ def agregar_producto(nombre, cantidad, categoria, precio, proveedor_id):
     except Exception as e:
         st.error(f"Error al agregar producto: {e}")
         return False
-
 
 def agregar_proveedor(nombre, contacto, telefono, email, direccion):
     """Agregar nuevo proveedor"""
@@ -150,6 +147,7 @@ def agregar_proveedor(nombre, contacto, telefono, email, direccion):
             "email": email.strip() if email else None,
             "direccion": direccion.strip() if direccion else None
         }
+        
         # eliminar None para no insertar claves vacías
         proveedor_data = {k: v for k, v in proveedor_data.items() if v is not None}
 
@@ -162,7 +160,6 @@ def agregar_proveedor(nombre, contacto, telefono, email, direccion):
         st.error(f"Error al agregar proveedor: {e}")
         return False
 
-
 def agregar_cliente(nombre, tipo_documento, documento, telefono, email, direccion):
     """Agregar nuevo cliente"""
     try:
@@ -174,8 +171,8 @@ def agregar_cliente(nombre, tipo_documento, documento, telefono, email, direccio
             "email": email.strip() if email else None,
             "direccion": direccion.strip() if direccion else None
         }
+        
         cliente_data = {k: v for k, v in cliente_data.items() if v is not None}
-
         response = supabase.table("clientes").insert(cliente_data).execute()
         if getattr(response, "error", None):
             st.error(f"Error al insertar cliente: {response.error}")
@@ -185,25 +182,35 @@ def agregar_cliente(nombre, tipo_documento, documento, telefono, email, direccio
         st.error(f"Error al agregar cliente: {e}")
         return False
 
-
 def agregar_venta(cliente_id, producto_id, cantidad, precio_unitario, notas=""):
-    """Agregar nueva venta"""
+    """
+    Agregar nueva venta:
+    - Inserta una fila en 'ventas' (sin columnas de producto, según tu esquema).
+    - Actualiza stock en 'inventario' y registra movimiento en 'movimientos_inventario'.
+    """
     try:
         total = cantidad * precio_unitario
-
+        
+        # Insertar venta (tabla ventas no tiene producto_id según tu schema)
         venta_data = {
             "cliente_id": cliente_id,
-            "producto_id": producto_id,
-            "cantidad": cantidad,
-            "precio_unitario": precio_unitario,
             "total": total,
-            "notas": notas.strip()
+            "estado": "completada",
+            "notas": notas.strip(),
+            "fecha_venta": datetime.now().isoformat()
         }
-
+        
         response = supabase.table("ventas").insert(venta_data).execute()
         if getattr(response, "error", None):
             st.error(f"Error al insertar venta: {response.error}")
             return False
+
+        # obtener id de la venta insertada (para referenciar en notas si lo deseas)
+        venta_id = None
+        try:
+            venta_id = response.data[0].get("id")
+        except Exception:
+            venta_id = None
 
         # Actualizar stock del producto
         producto_actual = supabase.table("inventario").select("cantidad").eq("id", producto_id).limit(1).execute()
@@ -212,23 +219,32 @@ def agregar_venta(cliente_id, producto_id, cantidad, precio_unitario, notas=""):
             return False
 
         if producto_actual.data:
-            nueva_cantidad = producto_actual.data[0]['cantidad'] - cantidad
-            # opcional: evita stock negativo
+            stock_actual = producto_actual.data[0].get('cantidad', 0)
+            nueva_cantidad = stock_actual - cantidad
+
+            # Evitar stock negativo (ajusta comportamiento si quieres permitirlo)
             if nueva_cantidad < 0:
                 st.error("Stock insuficiente para completar la venta.")
                 return False
 
-            upd = supabase.table("inventario").update({"cantidad": nueva_cantidad, "fecha_actualizacion": datetime.now().isoformat()}).eq("id", producto_id).execute()
+            upd = supabase.table("inventario").update({
+                "cantidad": nueva_cantidad,
+                "fecha_actualizacion": datetime.now().isoformat()
+            }).eq("id", producto_id).execute()
             if getattr(upd, "error", None):
                 st.error(f"Error al actualizar stock: {upd.error}")
                 return False
 
-            # Registrar movimiento de inventario
+            # Registrar movimiento de inventario (referenciando la venta en las notas)
+            notas_mov = f"Venta registrada{f' (venta_id={venta_id})' if venta_id else ''}"
+            if notas:
+                notas_mov += f" - {notas.strip()}"
+
             movimiento_data = {
                 "producto_id": producto_id,
                 "tipo": "salida",
                 "cantidad": cantidad,
-                "notas": f"Venta registrada - {notas.strip()}" if notas else "Venta registrada",
+                "notas": notas_mov,
                 "fecha": datetime.now().isoformat()
             }
             resp_mov = supabase.table("movimientos_inventario").insert(movimiento_data).execute()
@@ -241,7 +257,6 @@ def agregar_venta(cliente_id, producto_id, cantidad, precio_unitario, notas=""):
         st.error(f"Error al agregar venta: {e}")
         return False
 
-
 def agregar_movimiento(producto_id, tipo, cantidad, notas):
     """Agregar movimiento de inventario"""
     try:
@@ -252,12 +267,12 @@ def agregar_movimiento(producto_id, tipo, cantidad, notas):
             "notas": notas.strip() if notas else None,
             "fecha": datetime.now().isoformat()
         }
-
+        
         response = supabase.table("movimientos_inventario").insert(movimiento_data).execute()
         if getattr(response, "error", None):
             st.error(f"Error al insertar movimiento: {response.error}")
             return False
-
+        
         # Actualizar stock del producto
         producto_actual = supabase.table("inventario").select("cantidad").eq("id", producto_id).limit(1).execute()
         if getattr(producto_actual, "error", None):
@@ -272,17 +287,16 @@ def agregar_movimiento(producto_id, tipo, cantidad, notas):
                 nueva_cantidad = stock_actual - cantidad
             else:  # ajuste
                 nueva_cantidad = cantidad
-
+                
             upd = supabase.table("inventario").update({"cantidad": nueva_cantidad, "fecha_actualizacion": datetime.now().isoformat()}).eq("id", producto_id).execute()
             if getattr(upd, "error", None):
                 st.error(f"Error al actualizar stock tras movimiento: {upd.error}")
                 return False
-
+        
         return True
     except Exception as e:
         st.error(f"Error al agregar movimiento: {e}")
         return False
-
 
 def actualizar_producto(producto_id, datos):
     """Actualizar producto"""
@@ -298,7 +312,6 @@ def actualizar_producto(producto_id, datos):
         st.error(f"Error al actualizar: {e}")
         return False
 
-
 def eliminar_producto(producto_id):
     """Eliminar producto"""
     try:
@@ -311,13 +324,11 @@ def eliminar_producto(producto_id):
         st.error(f"Error al eliminar: {e}")
         return False
 
-
 def insertar_datos_ejemplo():
     """Insertar datos de ejemplo usando proveedor_id"""
     try:
         productos = obtener_productos()
         if not productos:
-            # Usar proveedor_id = 1 (HP Inc.) para todos los productos de ejemplo
             datos_ejemplo = [
                 {"nombre": "Laptop HP Pavilion", "cantidad": 15, "categoria": "Tecnología", "proveedor_id": 1, "precio": 3500000},
                 {"nombre": "Mouse Inalámbrico", "cantidad": 50, "categoria": "Accesorios", "proveedor_id": 2, "precio": 120000},
@@ -1214,5 +1225,6 @@ def mostrar_administracion():
 if __name__ == "__main__":
     supabase = get_supabase_client()
     main()
+
 
 
