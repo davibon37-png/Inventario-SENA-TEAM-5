@@ -47,14 +47,16 @@ def obtener_clientes():
 
 def obtener_ventas():
     """
-    Obtener ventas con información del cliente.
-    Nota: la tabla 'ventas' de tu esquema no contiene producto_id, por eso no se hace join a inventario aquí.
+    Obtener ventas con información del cliente y del producto (inventario).
     """
     try:
-        response = supabase.table("ventas").select("*, clientes(*)").order("fecha_venta", desc=True).execute()
+        # AGREGAMOS inventario(*) a la cadena del select
+        response = supabase.table("ventas").select("*, clientes(*), inventario(*)").order("fecha_venta", desc=True).execute()
+        
         if getattr(response, "error", None):
             st.error(f"Error al obtener ventas: {response.error}")
             return []
+            
         return response.data if response.data else []
     except Exception as e:
         st.error(f"Error al obtener ventas: {e}")
@@ -1225,6 +1227,7 @@ def mostrar_administracion():
 if __name__ == "__main__":
     supabase = get_supabase_client()
     main()
+
 
 
 
